@@ -43,7 +43,7 @@ def get_code_table(
         score column.
     aggregation_func
         Aggregation applied to ``aggregate_by`` within each group, passed through to
-        :meth:`pandas.core.groupby.DataFrameGroupBy.agg` (e.g. ``"mean"``, ``"count"``, or a
+        pandas.core.groupby.DataFrameGroupBy.agg (e.g. ``"mean"``, ``"count"``, or a
         custom callable).
     cell_type_order
         Explicit column order for the returned table. Every entry must be present in
