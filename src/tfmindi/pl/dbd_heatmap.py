@@ -21,7 +21,7 @@ def dbd_heatmap(
     linewidths: float = 0.01,
     standard_scale: bool = False,
     **kwargs,
-) -> plt.Figure | None:  # type: ignore[return]
+) -> plt.Figure | None:
     """
     Create a clustered heatmap showing seqlet counts per cell type and DNA-binding domain.
 

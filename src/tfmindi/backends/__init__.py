@@ -27,7 +27,9 @@ def _check_gpu_availability() -> bool:
         return _gpu_available  # type: ignore
     except ImportError:
         _gpu_available = False
-        return False
+    except cp.cuda.runtime.CUDARuntimeError:
+        _gpu_available = False
+    return False
 
 
 def get_backend() -> str:
