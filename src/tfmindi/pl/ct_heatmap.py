@@ -57,8 +57,7 @@ def ct_by_ct_heatmap(
         nes_df = nes_df[nes_df.columns[column_order]]
     
     if row_order is not None:
-        row_order = np.where(row_order)[0]
-        nes_df = nes_df.iloc[row_order, :]
+        nes_df = nes_df.loc[row_order, :]
     else:
         row_order = np.argsort(np.argmax(nes_df, 1))
         nes_df = nes_df.iloc[row_order, :]
