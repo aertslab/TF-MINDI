@@ -35,10 +35,10 @@ def ct_by_ct_heatmap(
     label_2 : str
         Label used for second collection of cell type regions in region_adata.obs[model_key].
 
-    row_order : list of int, optional
+    row_order : list of strings, optional
         Order of rows (cell types of label_1) to display in the heatmap.
     
-    col_order : list of int, optional
+    col_order : list of strings, optional
         Order of columns (cell types of label_2) to display in the heatmap.
     
     cmap : str, optional
@@ -51,12 +51,13 @@ def ct_by_ct_heatmap(
     nes_df = nes_df.loc[:,~nes_df.isna().all()]
 
     if col_order is not None:
-        nes_df = nes_df[nes_df.columns[col_order]]
+        nes_df = nes_df[col_order]
     else:
         column_order = np.argsort(np.argmax(nes_df, 0))
         nes_df = nes_df[nes_df.columns[column_order]]
     
     if row_order is not None:
+        row_order = np.where(row_order)[0]
         nes_df = nes_df.iloc[row_order, :]
     else:
         row_order = np.argsort(np.argmax(nes_df, 1))
@@ -68,7 +69,7 @@ def ct_by_ct_heatmap(
         2,
         height_ratios=(20, 1),
         width_ratios=(3, 1),
-        hspace=0.8,
+        hspace=0.3,
     )
     ax = fig.add_subplot(grid[0, :])
     masked_nes = np.ma.masked_invalid(nes_df.to_numpy())
