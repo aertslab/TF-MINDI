@@ -14,7 +14,7 @@ from tfmindi.tl.topic_modeling import (
     evaluate_topic_models,
     run_topic_modeling,
 )
-from tfmindi.tl.ct_code_comparison import ct_by_ct_nes
+from tfmindi.tl.ct_code_comparison import ct_by_ct_nes, cell_type_nes
 
 __all__ = [
     "cluster_seqlets",
@@ -27,5 +27,6 @@ __all__ = [
     "optimal_hierarchical_clustering",
     "get_region_profiles",
     "leiden_clustering",
-    "ct_by_ct_nes"
+    "ct_by_ct_nes",
+    "cell_type_nes"
 ]

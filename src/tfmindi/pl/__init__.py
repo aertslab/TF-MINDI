@@ -13,7 +13,7 @@ from tfmindi.pl.dbd_heatmap import dbd_heatmap
 from tfmindi.pl.logo import dbd_cluster_logos, dbd_logos
 from tfmindi.pl.region_topics import dbd_topic_heatmap, plot_top_motifs, region_topic_tsne
 from tfmindi.pl.tsne import region_tsne, tsne, tsne_logos
-from tfmindi.pl.ct_heatmap import ct_by_ct_heatmap
+from tfmindi.pl.ct_heatmap import ct_by_ct_heatmap, cell_type_nes_heatmap
 
 __all__ = [
     "tsne",
@@ -34,4 +34,5 @@ __all__ = [
     "region_tsne",
     "plot_top_motifs",
     "ct_by_ct_heatmap",
+    "cell_type_nes_heatmap",
 ]
