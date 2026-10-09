@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import random
 import warnings
+from collections.abc import Mapping
 
+import matplotlib.colors as mcol
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from anndata import AnnData
 from pandas.api.types import is_numeric_dtype
 
@@ -31,6 +34,58 @@ def _generate_random_colors(n_colors: int, seed: int = 42) -> list[str]:
     # global random stream as a side effect of drawing a palette.
     rng = random.Random(seed)
     return [f"#{rng.randint(0, 0xFFFFFF):06x}" for _ in range(n_colors)]
+
+
+_NA_COLOR = "#D3D3D3"  # lightgray, used for NaN ("Unknown") values
+
+
+def _categories(values: pd.Series) -> list:
+    """Category order used for storing colors, matching scanpy (sorted unique values for non-categoricals)."""
+    if isinstance(values.dtype, pd.CategoricalDtype):
+        return list(values.cat.categories)
+    return list(pd.Categorical(values.dropna()).categories)
+
+
+def _legacy_colors_to_list(adata: AnnData, column: str) -> None:
+    """Convert a legacy ``{category: color}`` dict in ``adata.uns[f'{column}_colors']`` to scanpy's list format."""
+    color_key = f"{column}_colors"
+    colors = adata.uns.get(color_key)
+    if not isinstance(colors, Mapping) or column not in adata.obs.columns:
+        return
+    # Keys read back from HDF5 are strings in lexicographic order, so map by key rather than position
+    colors = {str(k): v for k, v in colors.items()}
+    categories = _categories(adata.obs[column])
+    if all(str(c) in colors for c in categories):
+        adata.uns[color_key] = [colors[str(c)] for c in categories]
+    else:
+        # Incomplete legacy palette: drop it so it gets regenerated
+        del adata.uns[color_key]
+
+
+_NA_COLOR = "#D3D3D3"  # lightgray, used for NaN ("Unknown") values
+
+
+def _categories(values: pd.Series) -> list:
+    """Category order used for storing colors, matching scanpy (sorted unique values for non-categoricals)."""
+    if isinstance(values.dtype, pd.CategoricalDtype):
+        return list(values.cat.categories)
+    return list(pd.Categorical(values.dropna()).categories)
+
+
+def _legacy_colors_to_list(adata: AnnData, column: str) -> None:
+    """Convert a legacy ``{category: color}`` dict in ``adata.uns[f'{column}_colors']`` to scanpy's list format."""
+    color_key = f"{column}_colors"
+    colors = adata.uns.get(color_key)
+    if not isinstance(colors, Mapping) or column not in adata.obs.columns:
+        return
+    # Keys read back from HDF5 are strings in lexicographic order, so map by key rather than position
+    colors = {str(k): v for k, v in colors.items()}
+    categories = _categories(adata.obs[column])
+    if all(str(c) in colors for c in categories):
+        adata.uns[color_key] = [colors[str(c)] for c in categories]
+    else:
+        # Incomplete legacy palette: drop it so it gets regenerated
+        del adata.uns[color_key]
 
 
 def render_plot(
@@ -160,7 +215,9 @@ def ensure_colors(
     """
     Ensure colors exist for a categorical column, generating them if needed.
 
-    Colors are stored in adata.uns[f'{column}_colors'] following scanpy conventions.
+    Colors are stored in adata.uns[f'{column}_colors'] following scanpy conventions: a list of colors
+    aligned with the column's categories (sorted unique values for non-categorical columns).
+    NaN values are returned as "Unknown" (lightgray) but are not stored.
 
     Parameters
     ----------
@@ -186,80 +243,51 @@ def ensure_colors(
     if column not in adata.obs.columns:
         raise ValueError(f"Column '{column}' not found in adata.obs")
 
-    # Check if colors already exist and don't need regeneration
     color_key = f"{column}_colors"
-    if color_key in adata.uns and not force_regenerate:
-        existing_colors = adata.uns[color_key]
-
-        # Check if current data has new categories not in existing colormap
-        values = adata.obs[column]
-        if values.dtype == "category":
-            current_categories = set(values.cat.categories)
-            # Add "Unknown" if there are NaN values
-            if values.isnull().any():
-                current_categories.add("Unknown")
-        else:
-            current_categories = set(values.dropna().unique())
-            if values.isnull().any():
-                current_categories.add("Unknown")
-
-        existing_categories = set(existing_colors.keys())
-
-        # If all current categories have colors, return existing colormap
-        if current_categories.issubset(existing_categories):
-            return existing_colors
-        # Otherwise, we need to regenerate (continue to below)
-
-    # Get unique values, handling NaN
+    _legacy_colors_to_list(adata, column)
     values = adata.obs[column]
-    if values.dtype == "category":
-        # For categorical data, include all categories even if not present
-        unique_values = list(values.cat.categories)
-        # Add "Unknown" if there are NaN values
-        if values.isnull().any() and "Unknown" not in unique_values:
-            unique_values.append("Unknown")
-    else:
-        # For non-categorical, get unique values and handle NaN
-        unique_values = values.dropna().unique().tolist()
-        if values.isnull().any():
-            unique_values.append("Unknown")
+    unique_values = _categories(values)
+    stored = adata.uns.get(color_key)
 
-    # Generate colors
-    colormap = plt.get_cmap(cmap)
-    if len(unique_values) <= colormap.N:
-        # Use discrete colors from colormap
-        colors = [colormap(i) for i in range(len(unique_values))]
-    else:
-        # Too many categories for the discrete colormap - use fallback chain
-        if cmap == "tab10":
-            # Upgrade to tab20 if more than 10 categories
-            colormap = plt.get_cmap("tab20")
-            if len(unique_values) <= 20:
-                colors = [colormap(i) for i in range(len(unique_values))]
-            else:
-                # More than 20 categories - use random colors
-                hex_colors = _generate_random_colors(len(unique_values))
-                colors = [plt.matplotlib.colors.to_rgba(color) for color in hex_colors]
-        elif cmap == "tab20" and len(unique_values) > 20:
-            # Use random colors for more than 20 categories
-            hex_colors = _generate_random_colors(len(unique_values))
-            colors = [plt.matplotlib.colors.to_rgba(color) for color in hex_colors]
+    if stored is None or force_regenerate or len(stored) < len(unique_values):
+        # Generate colors
+        colormap = plt.get_cmap(cmap)
+        if len(unique_values) <= colormap.N:
+            # Use discrete colors from colormap
+            colors = [colormap(i) for i in range(len(unique_values))]
         else:
-            # For other colormaps, use them as continuous
-            colormap = plt.get_cmap(cmap)
-            colors = colormap(np.linspace(0, 1, len(unique_values)))
+            # Too many categories for the discrete colormap - use fallback chain
+            if cmap == "tab10":
+                # Upgrade to tab20 if more than 10 categories
+                colormap = plt.get_cmap("tab20")
+                if len(unique_values) <= 20:
+                    colors = [colormap(i) for i in range(len(unique_values))]
+                else:
+                    # More than 20 categories - use random colors
+                    hex_colors = _generate_random_colors(len(unique_values))
+                    colors = [mcol.to_rgba(color) for color in hex_colors]
+            elif cmap == "tab20" and len(unique_values) > 20:
+                # Use random colors for more than 20 categories
+                hex_colors = _generate_random_colors(len(unique_values))
+                colors = [mcol.to_rgba(color) for color in hex_colors]
+            else:
+                # For other colormaps, use them as continuous
+                colormap = plt.get_cmap(cmap)
+                colors = colormap(np.linspace(0, 1, len(unique_values)))
 
-    # Convert to hex colors
-    hex_colors = [plt.matplotlib.colors.to_hex(color) for color in colors]
+        # Convert to hex colors
+        hex_colors = [mcol.to_hex(color) for color in colors]
 
-    # Create color mapping
-    color_map = dict(zip(unique_values, hex_colors, strict=False))
-    # Special handling for "Unknown" - always use light gray
-    if "Unknown" in color_map:
-        color_map["Unknown"] = "#D3D3D3"  # lightgray
+        # A real "Unknown" category keeps the lightgray convention
+        hex_colors = [_NA_COLOR if v == "Unknown" else c for v, c in zip(unique_values, hex_colors, strict=True)]
+        # Store in AnnData using scanpy convention: list aligned with the categories
+        adata.uns[color_key] = hex_colors
+        stored = hex_colors
 
-    # Store in AnnData using scanpy convention
-    adata.uns[color_key] = color_map
+    # Extra stored colors are ignored, as in scanpy
+    color_map = {v: str(c) for v, c in zip(unique_values, stored, strict=False)}
+    if values.isnull().any():
+        color_map["Unknown"] = _NA_COLOR
 
     return color_map
 
@@ -287,6 +315,68 @@ def get_colors(
         Dictionary mapping category values to hex color codes
     """
     return ensure_colors(adata, column, cmap, force_regenerate=False)
+
+
+def set_colors(
+    adata: AnnData,
+    column: str,
+    color_dict: dict[str, str],
+) -> None:
+    """
+    Manually set colors for a categorical column.
+
+    Parameters
+    ----------
+    adata
+        AnnData object to store colors in
+    column
+        Column name in adata.obs to set colors for
+    color_dict
+        Dictionary mapping category values to color codes (hex, named, or RGB).
+        Categories not in the dictionary keep their existing (or newly generated) colors.
+        Colors for NaN values cannot be stored and are ignored.
+    """
+    color_map = ensure_colors(adata, column)
+    categories = _categories(adata.obs[column])
+    unknown = [value for value in color_dict if value not in categories]
+    if unknown:
+        warnings.warn(f"Ignoring colors for values not among the categories of '{column}': {unknown}", stacklevel=2)
+
+    for value, color in color_dict.items():
+        try:
+            color_map[value] = mcol.to_hex(color)
+        except ValueError:
+            # If conversion fails, keep original (might be a valid color name)
+            color_map[value] = color
+
+    # Store using scanpy convention: list aligned with the categories
+    adata.uns[f"{column}_colors"] = [color_map[c] for c in categories]
+
+
+def reset_colors(
+    adata: AnnData,
+    column: str | None = None,
+) -> None:
+    """
+    Reset stored colors, either for a specific column or all columns.
+
+    Parameters
+    ----------
+    adata
+        AnnData object containing stored colors
+    column
+        Column name to reset colors for. If None, reset all colors.
+    """
+    if column is None:
+        # Reset all colors (find all keys ending with '_colors')
+        color_keys = [key for key in adata.uns.keys() if key.endswith("_colors")]
+        for key in color_keys:
+            del adata.uns[key]
+    else:
+        # Reset specific column
+        color_key = f"{column}_colors"
+        if color_key in adata.uns:
+            del adata.uns[color_key]
 
 
 def get_point_colors(
