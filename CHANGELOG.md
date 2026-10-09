@@ -61,10 +61,15 @@ and this project adheres to [Semantic Versioning][].
   character. This is **5x** faster for a single logo and 6.6-8.9x for a grid of them (55 logos:
   8.1 s -> 1.1 s). The rendered output is pixel-identical.
 
+### Fixes
+
+- `tfmindi.pl.tsne` and `tfmindi.pl.tsne_logos` no longer raise `KeyError: nan` when the `color_by` column contains missing values.
+
 ### Breaking changes
 
 - The default seqlet caller changed from the raw recursive algorithm to `"recursive_q99_abs_smooth"`, so seqlet calls differ from previous versions by default. Pass `method="recursive_raw"` to reproduce the old behaviour.
 - The seqlet DataFrame (and the resulting `adata.obs`) column `p-value` was renamed to `score`. For the recursive callers `score = -log10(p)` (higher = more significant); for the other callers it is a caller-specific confidence score, not a p-value.
+- Plot colors in `adata.uns['<column>_colors']` are now stored as lists aligned with the column's categories (scanpy convention) instead of `{category: color}` dicts, so palettes are shared with `scanpy.pl`. Legacy dicts are converted automatically by `tfmindi.load_h5ad` and the `tfmindi.pl` color functions. `tfmindi.pl.set_colors` now accepts partial dicts.
 - `extract_seqlets` no longer exposes `threshold` and `additional_flanks` as dedicated parameters; they are still accepted as keyword arguments (forwarded to the recursive callers). Positional use of a third argument now sets `method`.
 - The log-likelihood used by `tfmindi.tl.evaluate_topic_models` was accumulating incorrectly (see Bugfixes). Now that it is fixed, the model-selection sweep can pick a **different number of topics** than previous versions did for the same data.
 - `method="finemo_fit_contrib"` now writes a numeric `score` (the strongest hit coefficient of a merged seqlet) instead of a comma-joined string, restoring the shared seqlet-caller column contract. The full per-hit coefficients moved to a new `finemo_hit_coefficients` column.

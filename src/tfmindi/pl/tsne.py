@@ -104,7 +104,7 @@ def tsne(
 
     # Filter color map to only include values present in current data
     if color_map is not None:
-        color_map = {k: color_map[k] for k in adata.obs[color_by].unique()}
+        color_map = {k: color_map[k] for k in adata.obs[color_by].astype(object).fillna("Unknown").unique()}
 
     # Create scatter plot
     fig, ax = plt.subplots(figsize=(8, 6))
@@ -226,7 +226,7 @@ def tsne_logos(
 
         # Filter color map to only include values present in current data
         if color_map is not None:
-            color_map = {k: color_map[k] for k in adata.obs[color_column].unique()}
+            color_map = {k: color_map[k] for k in adata.obs[color_column].astype(object).fillna("Unknown").unique()}
 
     fig, ax = plt.subplots(figsize=(12, 10))
     scatter = ax.scatter(x_coords, y_coords, c=point_colors, alpha=alpha, s=s)

@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from anndata import AnnData
+from anndata import AnnData, read_h5ad
 
 import tfmindi as tm
 
@@ -204,6 +204,38 @@ def test_save_h5ad_preserves_original(sample_adata_with_arrays):
         assert isinstance(sample_adata_with_arrays.var["motif_pwm"].iloc[0], np.ndarray)
         np.testing.assert_array_equal(sample_adata_with_arrays.obs["seqlet_matrix"].iloc[0], original_obs_array)
         np.testing.assert_array_equal(sample_adata_with_arrays.var["motif_pwm"].iloc[0], original_var_array)
+
+
+def test_load_h5ad_converts_legacy_colors():
+    """Test that legacy {category: color} dicts are converted to scanpy's list format on load."""
+    categories = ["bHLH/ZIP"] + [str(i) for i in range(11)]
+    adata = AnnData(obs=pd.DataFrame({"dbd": pd.Categorical(categories, categories=categories)}, index=categories))
+    legacy = {c: f"#0000{i:02x}" for i, c in enumerate(categories)}
+    adata.uns["dbd_colors"] = legacy
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        filepath = Path(tmp_dir) / "test.h5ad"
+        tm.save_h5ad(adata, filepath)
+        loaded = tm.load_h5ad(filepath)
+
+    assert list(loaded.uns["dbd_colors"]) == [legacy[c] for c in categories]
+
+
+def test_save_load_colors_roundtrip():
+    """Test that scanpy-format colors survive a save/load roundtrip."""
+    categories = [str(i) for i in range(12)]
+    adata = AnnData(obs=pd.DataFrame({"leiden": pd.Categorical(categories, categories=categories)}, index=categories))
+    tm.pl.ensure_colors(adata, "leiden")
+    palette = list(adata.uns["leiden_colors"])
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        filepath = Path(tmp_dir) / "test.h5ad"
+        tm.save_h5ad(adata, filepath)
+        loaded = tm.load_h5ad(filepath)
+        loaded_plain = read_h5ad(filepath)
+
+    assert list(loaded.uns["leiden_colors"]) == palette
+    assert list(loaded_plain.uns["leiden_colors"]) == palette
 
 
 def test_save_and_load_pattern(sample_patterns):

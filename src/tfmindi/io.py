@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd  # type: ignore
 from anndata import AnnData, read_h5ad  # type: ignore
 
+from tfmindi.pl._utils import _legacy_colors_to_list
 from tfmindi.types import _PATTERN_SPEC, _SEQLET_SPEC, Pattern, Seqlet
 
 # File-level group holding one one-hot array per region, keyed by example_idx.
@@ -136,6 +137,8 @@ def load_h5ad(filename: str | Path, backed: str | None = None, **kwargs) -> AnnD
 
     This function wraps AnnData.read_h5ad() with additional postprocessing to restore
     numpy arrays that were stored in .obs and .var columns using save_h5ad().
+    Plot colors saved by older TF-MInDi versions as ``{category: color}`` dicts in
+    ``.uns['<column>_colors']`` are converted to scanpy's list format.
 
     Parameters
     ----------
@@ -166,6 +169,10 @@ def load_h5ad(filename: str | Path, backed: str | None = None, **kwargs) -> AnnD
 
     # Unsanitize HDF5 keys in .uns dictionary
     adata.uns.update(_unsanitize_hdf5_keys(dict(adata.uns)))
+
+    # Convert legacy {category: color} dicts to scanpy's list format
+    for color_key in [k for k in adata.uns if k.endswith("_colors")]:
+        _legacy_colors_to_list(adata, color_key.removesuffix("_colors"))
 
     # Restore numpy arrays from the pickle strings written by save_h5ad
     for axis, df in (("obs", adata.obs), ("var", adata.var)):

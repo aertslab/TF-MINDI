@@ -1,10 +1,16 @@
 """Tests for plotting functions."""
 
+import warnings
+
+import matplotlib
 import numpy as np
 import pandas as pd
+import pytest
 from anndata import AnnData
 
-from tfmindi.pl._utils import get_point_colors
+from tfmindi.pl._utils import ensure_colors, get_colors, get_point_colors, set_colors
+
+matplotlib.use("Agg")
 
 
 class TestColorUtils:
@@ -31,9 +37,9 @@ class TestColorUtils:
         assert "Unknown" in color_map
         assert color_map["Unknown"] == "#D3D3D3"  # lightgray as defined in ensure_colors
 
-        # Verify colors are stored in scanpy format
-        assert "test_category_colors" in adata.uns
-        assert "Unknown" in adata.uns["test_category_colors"]
+        # Verify colors are stored in scanpy format: one color per category, NaN not stored
+        assert len(adata.uns["test_category_colors"]) == len(categories)
+        assert list(adata.uns["test_category_colors"]) == [color_map[c] for c in categories]
 
     def test_get_point_colors_with_nan_object_dtype(self):
         """Test that get_point_colors handles NaN values in object dtype columns."""
@@ -54,8 +60,8 @@ class TestColorUtils:
         # Verify that "Unknown" is in the color map
         assert "Unknown" in color_map
 
-        # Verify colors are stored in scanpy format
-        assert "test_dbd_colors" in adata.uns
+        # Verify colors are stored in scanpy format: one color per (sorted) category, NaN not stored
+        assert list(adata.uns["test_dbd_colors"]) == [color_map[c] for c in ["DBD1", "DBD2", "DBD3"]]
 
     def test_get_point_colors_with_string_dtype(self):
         """Test that get_point_colors treats the pandas string dtype as categorical.
@@ -96,7 +102,7 @@ class TestColorUtils:
         assert "Unknown" in color_map
 
         # Verify colors are stored in scanpy format
-        assert "test_col_colors" in adata.uns
+        assert len(adata.uns["test_col_colors"]) == len(categories)
 
     def test_get_point_colors_with_nan_no_stored_colors(self):
         """Test NaN handling when not using stored colors."""
@@ -263,3 +269,107 @@ class TestPatternLogos:
 
         with pytest.raises(ValueError, match="No patterns found with annotation"):
             tm.pl.pattern_logos(sample_patterns, annotation="NotAnAnnotation", show=False)
+
+    def test_colors_stored_in_scanpy_format(self):
+        """Test that colors are stored as a list aligned with the categories."""
+        categories = [str(i) for i in range(12)]
+        adata = AnnData(
+            obs=pd.DataFrame({"leiden": pd.Categorical(categories * 2, categories=categories)}).rename(index=str)
+        )
+
+        color_map = ensure_colors(adata, "leiden")
+
+        stored = adata.uns["leiden_colors"]
+        assert isinstance(stored, list)
+        assert stored == [color_map[c] for c in categories]
+
+    def test_object_column_sorted_order(self):
+        """Test that non-categorical columns are stored in sorted order, as scanpy would categorize them."""
+        adata = AnnData(obs=pd.DataFrame({"dbd": ["c", "a", "b", "a"]}).rename(index=str))
+
+        color_map = ensure_colors(adata, "dbd")
+
+        assert list(adata.uns["dbd_colors"]) == [color_map[c] for c in ["a", "b", "c"]]
+        assert not isinstance(adata.obs["dbd"].dtype, pd.CategoricalDtype)  # obs is not modified
+
+    def test_legacy_dict_converted(self):
+        """Test that legacy dict palettes are mapped by key, not position."""
+        categories = [str(i) for i in range(12)]
+        adata = AnnData(
+            obs=pd.DataFrame({"leiden": pd.Categorical(categories, categories=categories)}).rename(index=str)
+        )
+        legacy = {c: f"#0000{int(c):02x}" for c in sorted(categories)}  # lexicographic, as read from HDF5
+        adata.uns["leiden_colors"] = legacy
+
+        color_map = ensure_colors(adata, "leiden")
+
+        assert color_map == legacy
+        assert adata.uns["leiden_colors"] == [legacy[c] for c in categories]
+
+    def test_legacy_dict_incomplete_regenerated(self):
+        """Test that a legacy dict missing categories is regenerated."""
+        adata = AnnData(obs=pd.DataFrame({"col": pd.Categorical(["a", "b", "c"])}).rename(index=str))
+        adata.uns["col_colors"] = {"a": "#000000", "b": "#111111"}
+
+        color_map = ensure_colors(adata, "col")
+
+        assert len(adata.uns["col_colors"]) == 3
+        assert set(color_map) == {"a", "b", "c"}
+
+    def test_scanpy_palette_reused(self):
+        """Test that a list palette (e.g. written by scanpy) is reused unchanged."""
+        adata = AnnData(obs=pd.DataFrame({"col": pd.Categorical(["a", "b", "c"])}).rename(index=str))
+        palette = ["#ff0000", "#00ff00", "#0000ff"]
+        adata.uns["col_colors"] = np.array(palette)  # anndata reads lists back as arrays
+
+        assert get_colors(adata, "col") == dict(zip(["a", "b", "c"], palette, strict=True))
+        assert list(adata.uns["col_colors"]) == palette
+
+    def test_set_colors_partial(self):
+        """Test that set_colors overrides only the given categories."""
+        adata = AnnData(obs=pd.DataFrame({"col": pd.Categorical(["a", "b", "c"])}).rename(index=str))
+        before = ensure_colors(adata, "col")
+
+        with pytest.warns(UserWarning, match="Ignoring colors"):
+            set_colors(adata, "col", {"b": "red", "not_a_category": "blue"})
+
+        assert adata.uns["col_colors"] == [before["a"], "#ff0000", before["c"]]
+
+    def test_scanpy_roundtrip(self):
+        """Test that scanpy uses TF-MINDI colors unchanged."""
+        import scanpy as sc
+
+        categories = [str(i) for i in range(12)]
+        adata = AnnData(
+            obs=pd.DataFrame({"leiden": pd.Categorical(categories * 2, categories=categories)}).rename(index=str),
+            obsm={"X_test": np.random.rand(24, 2)},
+        )
+        ensure_colors(adata, "leiden")
+        palette = list(adata.uns["leiden_colors"])
+
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            sc.pl.embedding(adata, basis="X_test", color="leiden", show=False)
+
+        assert not [w for w in record if "not valid" in str(w.message)]
+        assert list(adata.uns["leiden_colors"]) == palette
+
+
+@pytest.mark.parametrize("dtype", ["category", object])
+@pytest.mark.parametrize("plot", ["tsne", "tsne_logos"])
+def test_tsne_with_nan(dtype, plot):
+    """Test that t-SNE plots handle NaN in the color_by column without KeyError."""
+    import tfmindi as tm
+
+    obs = pd.DataFrame(
+        {"col": pd.Series(["a", "b", np.nan, "a"], dtype=dtype), "leiden": pd.Categorical(["0", "0", "1", "1"])}
+    ).rename(index=str)
+    adata = AnnData(obs=obs, obsm={"X_tsne": np.random.rand(4, 2)})
+
+    if plot == "tsne":
+        fig = tm.pl.tsne(adata, color_by="col", show=False)
+    else:
+        fig = tm.pl.tsne_logos(adata, patterns={}, color_by="col", gray_background=False, show=False)
+
+    legend_labels = [t.get_text() for t in fig.axes[0].get_legend().get_texts()]
+    assert "Unknown" in legend_labels
