@@ -27,6 +27,7 @@ def tsne(
     clean: bool = True,
     title: str | None = None,
     save_path: str | None = None,
+    rasterize: bool = False,
     **kwargs,
 ) -> (dict, plt.Figure):
     """
@@ -63,6 +64,9 @@ def tsne(
         If True, removes axes borders, ticks, and axis labels. Default is False.
     title : str or None, optional
         Plot title. If None, defaults to "{obsm_key} embedding with {color_by} colouring".
+    rasterize : bool, optional
+        If True, the scatter points are rasterized while text, axes and legend
+        remain vector. Useful for keeping SVG/PDF exports small. Default is False.
     **kwargs
         Additional arguments passed to render_plot().
 
@@ -134,6 +138,7 @@ def tsne(
         alpha=alpha,
         ec=None,
         legend=show_legend,
+        rasterized=rasterize,
         ax=ax,
     )
     g.set_aspect('equal')

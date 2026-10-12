@@ -210,58 +210,20 @@ def optimal_hierarchical_clustering(
         region_adata: AnnData,
         metric: Literal["ARI","AMI","FMI","homogeneity","completeness","V_measure"] = "ARI",
         class_col: str = 'cell_type',
+        precomped_cluster: str = None,
         cluster_name: str = 'region_cluster',
         lower_cut: float = 0.75,
         seed_resolution: float = 5.0,
+        override_cut: float = None,
 ) -> ():
-    """
-    Find the optimal hierarchical clustering of regions using cell types as ground truth.
 
-    Seeds the embedding space with high-resolution Leiden clusters, builds an
-    agglomerative (average linkage, cosine distance) tree over the Leiden cluster
-    mean vectors, then sweeps 100 cutting heights (0.00–0.99) and selects the height
-    that maximises the chosen metric against ground-truth cell type labels.
-    The optimal cluster assignments are stored in-place and a diagnostic plot is shown.
-
-    Parameters
-    ----------
-    region_adata : AnnData
-        AnnData object to cluster. Must contain cell type labels in obs[class_col].
-        Leiden seeds and final cluster labels are written in-place.
-    metric : {"ARI", "AMI", "FMI", "homogeneity", "completeness", "V_measure"}, optional
-        Scoring metric used to select the optimal cutting height. Default is "ARI".
-        Note: currently the optimisation always uses ARI regardless of this parameter.
-    class_col : str, optional
-        Column in region_adata.obs containing ground-truth cell type labels.
-        Default is 'cell_type'.
-    cluster_name : str, optional
-        Key under which the final cluster labels are stored in region_adata.obs.
-        Cluster labels are prefixed with 'H' (e.g. 'H0', 'H1', ...).
-        Default is 'region_cluster'.
-    lower_cut : float, optional
-        Hierarchical ARI clustering makes big clusters. It is often interesting to
-        artificially increase the cluster count by lowering the cut height
-
-    Returns
-    -------
-    tuple(float, float)
-        The optimal cut-height and accompanying ARI score achieved.
-
-    Side effects
-    ------------
-    - region_adata.obs['leiden'] : Leiden seed cluster assignments (from leiden_clustering).
-    - region_adata.obs[cluster_name] : Final hierarchical cluster assignments.
-    - Displays a dual-axis plot of clustering metrics vs cutting height, with the
-      optimal cut marked by a dashed vertical line.
-
-    Notes
-    -----
-    The metric parameter is defined but not yet used to select the optimisation
-    target — the function currently always maximises ARI.
-    """
     # Seed the embedding space with tiny leiden clusters
-    print(" [clustering] Seeding embedding space with leiden clusters...")
-    leiden_clustering(region_adata, resolution=10)
+    if precomped_cluster is not None:
+        print(f" [clustering] Using precomputed cluster column '{precomped_cluster}'")
+        region_adata.obs['leiden'] = region_adata.obs[precomped_cluster]
+    else:
+        print(" [clustering] Seeding embedding space with leiden clusters...")
+        leiden_clustering(region_adata, resolution=seed_resolution)
 
     # Calculate mean vectors for each leiden seed
     print(" [clustering] Build hierarchical tree...")
@@ -273,67 +235,79 @@ def optimal_hierarchical_clustering(
     dist = pdist(region_clusters.to_numpy(), metric="cosine")
     Z = linkage(dist, method="average")
 
-    # Try 100 cutting heights for the hierarchical tree
-    resolutions = [i/100 for i in range(100)]
-    results = []
-    for res in resolutions:
+    if override_cut is not None:
+        print(f" [clustering] Using override cut height {override_cut}")
+        optimal_res = override_cut
+        optimal_ari = None
+        resolutions = [override_cut]
+        results = []
 
-        print(f"\r [clustering] Cutting at height {res}", end="", flush=True)
-
-        # Apply resolution
-        clusters = fcluster(Z, t=res, criterion="distance")
-        new_clusters = dict(zip(region_clusters.index,[f"H{c-1}" for c in clusters], strict=False))
+        clusters = fcluster(Z, t=override_cut, criterion="distance")
+        new_clusters = dict(zip(region_clusters.index, [f"H{c-1}" for c in clusters], strict=False))
         region_adata.obs[cluster_name] = [new_clusters[c] for c in region_adata.obs['leiden']]
+        print(f" [clustering] Saved clusters in .obs {cluster_name}")
 
-        # ARI score
-        labels_pred = region_adata.obs[cluster_name]
-        labels_true = region_adata.obs[class_col]
-        n_clusters = labels_pred.nunique()
-        ari   = adjusted_rand_score(labels_true, labels_pred)
-        ami   = adjusted_mutual_info_score(labels_true, labels_pred)
-        fmi   = fowlkes_mallows_score(labels_true, labels_pred)
-        h, c, v = homogeneity_completeness_v_measure(labels_true, labels_pred)
+    else:
+        # Try 100 cutting heights for the hierarchical tree
+        resolutions = [i/100 for i in range(100)]
+        results = []
+        for res in resolutions:
+            print(f"\r [clustering] Cutting at height {res}", end="", flush=True)
 
-        results.append({
-            'resolution': res, 'n_clusters': n_clusters,
-            'ARI': ari, 'AMI': ami, 'FMI': fmi,
-            'homogeneity': h, 'completeness': c, 'V_measure': v
-        })
+            clusters = fcluster(Z, t=res, criterion="distance")
+            new_clusters = dict(zip(region_clusters.index, [f"H{c-1}" for c in clusters], strict=False))
+            region_adata.obs[cluster_name] = [new_clusters[c] for c in region_adata.obs['leiden']]
 
-    # Optimal resolution
-    resolutions = [ari['resolution'] for ari in results]
-    optimal_res = resolutions[np.argmax([ari['ARI'] for ari in results])]
-    optimal_ari = np.max([ari['ARI'] for ari in results])
-    print(f"\n [clustering] The optimal resolution is {optimal_res} with an ARI of {optimal_ari}")
+            labels_pred = region_adata.obs[cluster_name]
+            labels_true = region_adata.obs[class_col]
+            n_clusters = labels_pred.nunique()
+            ari   = adjusted_rand_score(labels_true, labels_pred)
+            ami   = adjusted_mutual_info_score(labels_true, labels_pred)
+            fmi   = fowlkes_mallows_score(labels_true, labels_pred)
+            h, c, v = homogeneity_completeness_v_measure(labels_true, labels_pred)
 
-    clusters = fcluster(Z, t=optimal_res * lower_cut, criterion="distance")
-    new_clusters = dict(zip(region_clusters.index,[f"H{c-1}" for c in clusters], strict=False))
-    region_adata.obs[cluster_name] = [new_clusters[c] for c in region_adata.obs['leiden']]
-    print(f" [clustering] Saved clusters in .obs {cluster_name}")
+            results.append({
+                'resolution': res, 'n_clusters': n_clusters,
+                'ARI': ari, 'AMI': ami, 'FMI': fmi,
+                'homogeneity': h, 'completeness': c, 'V_measure': v
+            })
+
+        resolutions = [r['resolution'] for r in results]
+        optimal_res = resolutions[np.argmax([r['ARI'] for r in results])]
+        optimal_ari = np.max([r['ARI'] for r in results])
+        print(f"\n [clustering] The optimal resolution is {optimal_res} with an ARI of {optimal_ari}")
+
+        clusters = fcluster(Z, t=optimal_res * lower_cut, criterion="distance")
+        new_clusters = dict(zip(region_clusters.index, [f"H{c-1}" for c in clusters], strict=False))
+        region_adata.obs[cluster_name] = [new_clusters[c] for c in region_adata.obs['leiden']]
+        print(f" [clustering] Saved clusters in .obs {cluster_name}")
 
     # Plot
-    print(" [clustering] Plotting...")
-    fig, ax1 = plt.subplots(figsize=(8, 4))
-    ax1.plot(resolutions, [ari['ARI']          for ari in results], label='ARI', color='k')
-    ax1.plot(resolutions, [ari['homogeneity']  for ari in results], label='homogeneity')
-    ax1.plot(resolutions, [ari['completeness'] for ari in results], label='completeness')
-    ax1.plot(resolutions, [ari['V_measure']    for ari in results], label='V_measure')
-    ax1.axvline(optimal_res, color='k', linestyle='--', label='max ARI')
-    ax1.axvline(optimal_res * lower_cut, color='gray', linestyle='--', label='max ARI x lower cut')
-    ax1.set_ylabel('Cluster pureness metrics')
-    ax1.set_xlabel('Cutting heights')
-    ax1.set_title('ARI score with respect to cut height for region clusters')
+    if results:
+        print(" [clustering] Plotting...")
+        fig, ax1 = plt.subplots(figsize=(8, 4))
+        ax1.plot(resolutions, [r['ARI']          for r in results], label='ARI', color='k')
+        ax1.plot(resolutions, [r['homogeneity']  for r in results], label='homogeneity')
+        ax1.plot(resolutions, [r['completeness'] for r in results], label='completeness')
+        ax1.plot(resolutions, [r['V_measure']    for r in results], label='V_measure')
+        ax1.axvline(optimal_res, color='k', linestyle='--', label='max ARI')
+        ax1.axvline(optimal_res * lower_cut, color='gray', linestyle='--', label='max ARI x lower cut')
+        ax1.set_ylabel('Cluster pureness metrics')
+        ax1.set_xlabel('Cutting heights')
+        ax1.set_title('ARI score with respect to cut height for region clusters')
 
-    ax2 = ax1.twinx()
-    ax2.plot(resolutions, [ari['n_clusters'] for ari in results], label='N', color='black', linestyle=':')
-    ax2.set_ylabel('N clusters')
+        ax2 = ax1.twinx()
+        ax2.plot(resolutions, [r['n_clusters'] for r in results], label='N', color='black', linestyle=':')
+        ax2.set_ylabel('N clusters')
 
-    lines1, labels1 = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2)
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2)
 
-    plt.tight_layout()
-    plt.show()
+        plt.tight_layout()
+        plt.show()
+    else:
+        print(" [clustering] Skipping plot (override_cut was used, no sweep results to display)")
 
     return (optimal_res, optimal_ari)
 
