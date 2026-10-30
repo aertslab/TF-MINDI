@@ -17,26 +17,26 @@ def ct_by_ct_obs_matrix(
 
     Parameters
     ----------
-    adata : AnnData
+    region_adata : AnnData
         AnnData object containing:
-        - adata.obs[ct_key]: cell type annotation per region
-        - adata.obs[model_key]: model annotation per region
-        - adata.obsp[conn_key]: neighbor graph (sparse, typically CSR)
+        - region_adata.obs[ct_key]: cell type annotation per region
+        - region_adata.obs[model_key]: model annotation per region
+        - region_adata.obsp[conn_key]: neighbor graph (sparse, typically CSR)
 
     ct_key : str
-        Column in adata.obs defining cell type labels.
+        Column in region_adata.obs defining cell type labels.
 
     model_key : str
-        Column in adata.obs defining model labels.
+        Column in region_adata.obs defining model labels.
 
     conn_key : str
-        Key in adata.obsp storing the neighbor graph.
+        Key in region_adata.obsp storing the neighbor graph.
 
     label_1 : str
-        Label used for first collection of cell type regions in adata.obs[model_key].
+        Label used for first collection of cell type regions in region_adata.obs[model_key].
 
     label_2 : str
-        Label used for second collection of cell type regions in adata.obs[model_key].
+        Label used for second collection of cell type regions in region_adata.obs[model_key].
 
     Returns
     -------
@@ -64,10 +64,10 @@ def ct_by_ct_obs_matrix(
         Ordered list of cell types defining the row/column order.
 
     h_idx : numpy.ndarray
-        Indices of label 1 regions in adata.obs.
+        Indices of label 1 regions in region_adata.obs.
 
     m_idx : numpy.ndarray
-        Indices of label 2 regions in adata.obs.
+        Indices of label 2 regions in region_adata.obs.
 
     C_hm : scipy.sparse.csr_matrix
         Submatrix of the neighbor graph containing only
@@ -151,7 +151,7 @@ def ct_by_ct_nes(
 
     Parameters
     ----------
-    adata : AnnData
+    region_adata : AnnData
         AnnData object with region-level annotations and neighbor graph.
 
     n_perm : int
@@ -163,27 +163,6 @@ def ct_by_ct_nes(
     ct_key, model_key, conn_key, label_1, label_2
         Same meaning as in ct_by_ct_obs_matrix.
 
-    Returns
-    -------
-    obs_df : pandas.DataFrame (n_ct × n_ct)
-        Observed label_1 label_2 connectivity fractions.
-        Same as returned by ct_by_ct_obs_matrix.
-
-    nes_df : pandas.DataFrame (n_ct × n_ct)
-        Normalized enrichment scores (z-scores):
-
-            NES(h, m) = (obs(h, m) - mean_null(h, m)) / sd_null(h, m)
-
-        NaN if:
-        - no label_1 label_2 edges for CT h
-        - null standard deviation is zero
-
-    mu_df : pandas.DataFrame (n_ct × n_ct)
-        Mean of the permutation null distribution for each CT pair.
-
-    sd_df : pandas.DataFrame (n_ct × n_ct)
-        Standard deviation of the permutation null distribution
-        for each CT pair.
     """
 
     obs_df, cross, denom, ct_list, h_idx, m_idx, C_hm, H, M = ct_by_ct_obs_matrix(
@@ -384,27 +363,6 @@ def cell_type_nes(
     ct_key, conn_key
         Same meaning as in `cell_type_obs_matrix`.
 
-    Returns
-    -------
-    obs_df : pandas.DataFrame (n_ct × n_ct)
-        Observed all-vs-all cell-type connectivity fractions.
-        Same as returned by `cell_type_obs_matrix`.
-
-    nes_df : pandas.DataFrame (n_ct × n_ct)
-        Normalized enrichment scores (z-scores):
-
-            NES(i, j) = (obs(i, j) - mean_null(i, j)) / sd_null(i, j)
-
-        NaN if:
-        - no edges for CT i
-        - null standard deviation is zero
-
-    mu_df : pandas.DataFrame (n_ct × n_ct)
-        Mean of the permutation null distribution for each CT pair.
-
-    sd_df : pandas.DataFrame (n_ct × n_ct)
-        Standard deviation of the permutation null distribution
-        for each CT pair.
     """
 
     obs_df, cross, denom, ct_list, ct_codes0, C, G = cell_type_obs_matrix(

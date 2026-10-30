@@ -7,6 +7,7 @@ def ct_by_ct_heatmap(
     region_adata,
     label_1=None,
     label_2=None,
+    sort_by_strength=False,
     row_order=None,
     col_order = None,
     cmap='Reds',
@@ -52,22 +53,25 @@ def ct_by_ct_heatmap(
     nes_df = nes_df[~nes_df.isna().all(axis=1)]
     nes_df = nes_df.loc[:,~nes_df.isna().all()]
 
-    if (col_order is not None) & (row_order is not None):
-        nes_df = nes_df[col_order]
-        nes_df = nes_df.loc[row_order, :]
-    elif (col_order is not None) & (row_order is None):
-        nes_df = nes_df[col_order]
-        row_order = np.argsort(np.argmax(nes_df, 1))    ## Sort the rows
-        nes_df = nes_df.iloc[row_order, :]
-    elif (col_order is None) & (row_order is not None):
-        nes_df = nes_df.loc[row_order, :]
-        column_order = np.argsort(np.argmax(nes_df, 0)) ## Sort the columns
-        nes_df = nes_df[nes_df.columns[column_order]]
-    else:
-        column_order = np.argsort(np.argmax(nes_df, 0)) ## Sort both
-        nes_df = nes_df[nes_df.columns[column_order]]
+    if sort_by_strength:
+        nes_df = nes_df[nes_df.max(axis=0).sort_values(ascending=False).index] ## Column order
         row_order = np.argsort(np.argmax(nes_df, 1))
         nes_df = nes_df.iloc[row_order, :]    
+    else:
+        if (col_order is not None) & (row_order is not None):
+            nes_df = nes_df[col_order]
+            nes_df = nes_df.loc[row_order, :]
+        elif (col_order is not None) & (row_order is None):
+            nes_df = nes_df[col_order]
+            row_order = np.argsort(np.argmax(nes_df, 1))    ## Sort the rows
+            nes_df = nes_df.iloc[row_order, :]
+        elif (col_order is None) & (row_order is not None):
+            nes_df = nes_df.loc[row_order, :]
+            column_order = np.argsort(np.argmax(nes_df, 0)) ## Sort the columns
+            nes_df = nes_df[nes_df.columns[column_order]]
+        else:
+            column_order = np.argsort(np.argmax(nes_df, 0)) ## Sort both
+            nes_df = nes_df[nes_df.columns[column_order]]
 
     if label_1 == None:
         label_1 = region_adata.uns['ct_by_ct']['label_1']
@@ -90,8 +94,8 @@ def ct_by_ct_heatmap(
     ax.set_xticklabels(nes_df.columns)
     ax.set_yticks(np.arange(nes_df.shape[0]))
     ax.set_yticklabels(nes_df.index)
-    ax.set_xlabel(f"{label_2} cell type")
-    ax.set_ylabel(f"{label_1} cell type")
+    ax.set_xlabel(f"{label_2}")
+    ax.set_ylabel(f"{label_1}")
 
     cbar_ax = fig.add_subplot(grid[1, 1])
     fig.colorbar(image, cax=cbar_ax, orientation="horizontal")
@@ -148,17 +152,14 @@ def cell_type_nes_heatmap(
         nes_df = nes_df.loc[row_order, :]
     elif (col_order is not None) & (row_order is None):
         nes_df = nes_df[col_order]
-        row_order = np.argsort(np.argmax(nes_df, 1))    ## Sort the rows
-        nes_df = nes_df.iloc[row_order, :]
+        nes_df = nes_df.iloc[col_order, :]
     elif (col_order is None) & (row_order is not None):
         nes_df = nes_df.loc[row_order, :]
-        column_order = np.argsort(np.argmax(nes_df, 0)) ## Sort the columns
-        nes_df = nes_df[nes_df.columns[column_order]]
+        nes_df = nes_df[row_order]
     else:
         column_order = np.argsort(np.argmax(nes_df, 0)) ## Sort both
         nes_df = nes_df[nes_df.columns[column_order]]
-        row_order = np.argsort(np.argmax(nes_df, 1))
-        nes_df = nes_df.iloc[row_order, :]
+        nes_df = nes_df.iloc[column_order, :]
 
     fig = plt.figure()
     grid = fig.add_gridspec(
