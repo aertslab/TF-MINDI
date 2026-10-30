@@ -464,7 +464,7 @@ def _stage2_dp(f_all, offsets, Q_lens, n_score_bins, n_cache, T_max, Q_max, n_th
     _A = np.empty((n_threads, Q_max, Q_max, n_len), dtype=np.float64)
     _A_csum = np.empty((n_threads, Q_max, Q_max, n_len), dtype=np.float64)
 
-    for b in prange(len(Q_lens)):
+    for b in prange(len(Q_lens)):  # type: ignore
         pid = numba.get_thread_id()
         _p_value_backgrounds(f_all[b], _A[pid], B_all[b], _A_csum[pid], Q_lens[b], n_score_bins, T_max, offsets[b])
 
@@ -478,7 +478,7 @@ def _select_nearest(merged, out, n_nearest):
     enough that a host-side ``np.argsort`` picks a different set of motifs. Queries are
     sorted independently, so the loop parallelises without touching that ordering.
     """
-    for b in prange(merged.shape[0]):
+    for b in prange(merged.shape[0]):  # type: ignore
         idxs = np.argsort(merged[b, :, 0])[:n_nearest]
         out[b, :, :5] = merged[b][idxs]
         out[b, :, 5] = idxs
@@ -512,7 +512,7 @@ def _stage3_gpu(
     B_d[:n_q].set(B_all)
     block = 128
     total = n_q * n_targets
-    _module.get_function("p_values")(
+    _module.get_function("p_values")(  # type: ignore
         ((total + block - 1) // block,),
         (block,),
         (
@@ -536,7 +536,7 @@ def _stage3_gpu(
     n_in = n_targets // 2 if reverse_complement else n_targets
     if reverse_complement:
         half = n_q * n_in
-        _module.get_function("merge_rc")(((half + block - 1) // block,), (block,), (results, n_q, n_targets))
+        _module.get_function("merge_rc")(((half + block - 1) // block,), (block,), (results, n_q, n_targets))  # type: ignore
     return cp.asnumpy(results[:, :n_in])
 
 
@@ -661,7 +661,7 @@ def _stage1_batch(
     n_q = len(qlen_b)
 
     gamma = cp.empty((nt, ncol), dtype=cp.float64)
-    _gamma_kernel(Xd, Yd, Xnd, Ynd, Xd.shape[-1], nt, ncol, c0, gamma)
+    _gamma_kernel(Xd, Yd, Xnd, Ynd, Xd.shape[-1], nt, ncol, c0, gamma)  # type: ignore
 
     z_min_ = gamma.min(axis=0)
     z_max_ = gamma.max(axis=0)
@@ -670,13 +670,13 @@ def _stage1_batch(
     mass = cp.zeros((ncol, n_median_bins), dtype=cp.uint64)
     block = 256
     grid = (min((nt * ncol + block - 1) // block, 8192),)
-    _module.get_function("median_mass")(grid, (block,), (gamma, z_min_, span, counts_d, mass, ncol, nt, n_median_bins))
+    _module.get_function("median_mass")(grid, (block,), (gamma, z_min_, span, counts_d, mass, ncol, nt, n_median_bins))  # type: ignore
 
     # `count >= total / 2` without the float division the CPU uses.
     k = (2 * cp.cumsum(mass.astype(cp.int64), axis=1) >= total_counts).argmax(axis=1)
     value = cp.empty(ncol, dtype=cp.float64)
     cgrid = ((int(ncol) + 127) // 128,)
-    _module.get_function("median_value")(
+    _module.get_function("median_value")(  # type: ignore
         cgrid, (128,), (gamma, z_min_, span, counts_d, k.astype(cp.int64), value, ncol, nt, n_median_bins)
     )
     medians = value / mass[cp.arange(ncol), k].astype(cp.float64)
@@ -703,7 +703,7 @@ def _stage1_batch(
 
     gamma_int = cp.empty((n_q, nt, q_max), dtype=cp.int8)
     f = cp.zeros((n_q, q_max, n_bins + 1), dtype=cp.float64)
-    _module.get_function("integerize")(
+    _module.get_function("integerize")(  # type: ignore
         cgrid,
         (128,),
         (
@@ -896,12 +896,12 @@ def gpu_tomtom(
             del gamma_int
 
             if pending is not None:
-                pending_dp.result()
+                pending_dp.result()  # type: ignore
                 _score(pending)
             pending, pending_dp = this, this_dp
 
         if pending is not None:
-            pending_dp.result()
+            pending_dp.result()  # type: ignore
             _score(pending)
 
     if n_jobs != -1:

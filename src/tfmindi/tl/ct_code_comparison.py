@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
-from scanpy.pp import neighbors
+from scanpy.preprocessing import neighbors
+
 
 def ct_by_ct_obs_matrix(
     region_adata,
@@ -11,9 +12,7 @@ def ct_by_ct_obs_matrix(
     model_key="model",
     conn_key="connectivities",
 ):
-    """
-    Compute the observed label_1 label_2 cross-cell-type connectivity matrix
-    from a region-level neighbor graph.
+    """Compute the observed label_1 label_2 cross-cell-type connectivity matrix from a region-level neighbor graph.
 
     Parameters
     ----------
@@ -40,7 +39,7 @@ def ct_by_ct_obs_matrix(
 
     Returns
     -------
-    obs_df : pandas.DataFrame (n_ct × n_ct)
+    obs_df : pandas.DataFrame (n_ct x n_ct)
         Observed cross-model neighbor fractions.
         Rows = label 1 cell types
         Columns = label 2 cell types
@@ -52,7 +51,7 @@ def ct_by_ct_obs_matrix(
 
         Rows may contain NaNs if label 1 CT h has zero label_1 label_2 edges.
 
-    cross : numpy.ndarray (n_ct × n_ct)
+    cross : numpy.ndarray (n_ct x n_ct)
         Raw weighted edge counts from label 1 CTs to label 2 CTs.
         Same layout as obs_df, but unnormalized.
 
@@ -71,17 +70,16 @@ def ct_by_ct_obs_matrix(
 
     C_hm : scipy.sparse.csr_matrix
         Submatrix of the neighbor graph containing only
-        label 1 rows × label 2 columns.
+        label 1 rows x label 2 columns.
 
     H : scipy.sparse.csr_matrix
         One-hot membership matrix for label 1 regions:
-        shape = (n_label 1_regions × n_ct)
+        shape = (n_label 1_regions x n_ct)
 
     M : scipy.sparse.csr_matrix
         One-hot membership matrix for label 2 regions:
-        shape = (n_label 2_regions × n_ct)
+        shape = (n_label 2_regions x n_ct)
     """
-
     if conn_key not in region_adata.obsp:
         neighbors(region_adata)
 
@@ -92,8 +90,8 @@ def ct_by_ct_obs_matrix(
     ct_list = list(ct_cat.categories)
     n_ct = len(ct_list)
 
-    is_h = (obs[model_key].values == label_1)
-    is_m = (obs[model_key].values == label_2)
+    is_h = obs[model_key].values == label_1
+    is_m = obs[model_key].values == label_2
 
     h_idx = np.where(is_h)[0]
     m_idx = np.where(is_m)[0]
@@ -108,42 +106,31 @@ def ct_by_ct_obs_matrix(
 
     # Build one-hot membership matrices (sparse)
     H = sp.csr_matrix(
-        (np.ones_like(h_codes, dtype=np.float32),
-         (np.arange(len(h_codes)), h_codes)),
-        shape=(len(h_codes), n_ct)
+        (np.ones_like(h_codes, dtype=np.float32), (np.arange(len(h_codes)), h_codes)), shape=(len(h_codes), n_ct)
     )
     M = sp.csr_matrix(
-        (np.ones_like(m_codes, dtype=np.float32),
-         (np.arange(len(m_codes)), m_codes)),
-        shape=(len(m_codes), n_ct)
+        (np.ones_like(m_codes, dtype=np.float32), (np.arange(len(m_codes)), m_codes)), shape=(len(m_codes), n_ct)
     )
 
     # cross edges: (ct_h x ct_m)
     cross = (H.T @ (C_hm @ M)).toarray()
 
     # denom: total label 1->label 2 weight per label 1 ct
-    denom_vec = (H.T @ (C_hm @ np.ones((len(m_codes), 1), dtype=np.float32)))
+    denom_vec = H.T @ (C_hm @ np.ones((len(m_codes), 1), dtype=np.float32))
     denom = np.asarray(denom_vec).ravel()
 
     # Avoid divide-by-zero for rare CTs
     obs_mat = np.divide(cross, denom[:, None], out=np.full_like(cross, np.nan), where=(denom[:, None] > 0))
 
-    obs_df = pd.DataFrame(obs_mat, index=ct_list, columns=ct_list)
+    obs_df = pd.DataFrame(obs_mat, index=np.array(ct_list), columns=np.array(ct_list))
     return obs_df, cross, denom, ct_list, h_idx, m_idx, C_hm, H, M
 
+
 def ct_by_ct_nes(
-    region_adata,
-    label_1,
-    label_2,
-    n_perm=200,
-    seed=0,
-    ct_key="cell_type",
-    model_key="model",
-    conn_key="connectivities"
+    region_adata, label_1, label_2, n_perm=200, seed=0, ct_key="cell_type", model_key="model", conn_key="connectivities"
 ):
     """
-    Compute normalized enrichment scores (NES) for cell-type connectivity
-    cell-type connectivity using permutation testing for two labels (model systems or model).
+    Compute normalized enrichment scores (NES) for cell-type connectivity cell-type connectivity using permutation testing for two labels (model systems or model).
 
     This function compares the observed neighbor connectivity
     to a null distribution obtained by permuting label_1 cell-type labels
@@ -164,7 +151,6 @@ def ct_by_ct_nes(
         Same meaning as in ct_by_ct_obs_matrix.
 
     """
-
     obs_df, cross, denom, ct_list, h_idx, m_idx, C_hm, H, M = ct_by_ct_obs_matrix(
         region_adata,
         ct_key=ct_key,
@@ -188,9 +174,9 @@ def ct_by_ct_nes(
 
     # Online mean/var (Welford)
     mean = np.zeros((n_ct, n_ct), dtype=np.float64)
-    M2   = np.zeros((n_ct, n_ct), dtype=np.float64)
+    M2 = np.zeros((n_ct, n_ct), dtype=np.float64)
 
-    ones_m = np.ones((n_m, 1), dtype=np.float32)
+    # ones_m = np.ones((n_m, 1), dtype=np.float32)
     denom_safe = denom.astype(np.float64)
     denom_safe[denom_safe == 0] = np.nan  # keep divisions sane
 
@@ -199,13 +185,11 @@ def ct_by_ct_nes(
 
         # Build permuted label 2 one-hot (sparse)
         M_perm = sp.csr_matrix(
-            (np.ones_like(perm_codes, dtype=np.float32),
-             (np.arange(n_m), perm_codes)),
-            shape=(n_m, n_ct)
+            (np.ones_like(perm_codes, dtype=np.float32), (np.arange(n_m), perm_codes)), shape=(n_m, n_ct)
         )
 
         cross_p = (H.T @ (C_hm @ M_perm)).toarray().astype(np.float64)
-        frac_p = cross_p / denom_safe[:, None]   # (ct_h x ct_m)
+        frac_p = cross_p / denom_safe[:, None]  # (ct_h x ct_m)
 
         # update online mean/var
         delta = frac_p - mean
@@ -220,18 +204,19 @@ def ct_by_ct_nes(
     nes[sd == 0] = np.nan
 
     nes_df = pd.DataFrame(nes, index=ct_list, columns=ct_list)
-    mu_df  = pd.DataFrame(mean, index=ct_list, columns=ct_list)
-    sd_df  = pd.DataFrame(sd, index=ct_list, columns=ct_list)
+    mu_df = pd.DataFrame(mean, index=ct_list, columns=ct_list)
+    sd_df = pd.DataFrame(sd, index=ct_list, columns=ct_list)
 
-    region_adata.uns['ct_by_ct'] = {
-        'obs': obs_df,
-        'nes': nes_df,
-        'mu': mu_df,
-        'sd': sd_df,
-        'label_1': label_1,
-        'label_2': label_2
+    region_adata.uns["ct_by_ct"] = {
+        "obs": obs_df,
+        "nes": nes_df,
+        "mu": mu_df,
+        "sd": sd_df,
+        "label_1": label_1,
+        "label_2": label_2,
     }
     return
+
 
 def cell_type_obs_matrix(
     region_adata,
@@ -239,8 +224,7 @@ def cell_type_obs_matrix(
     conn_key="connectivities",
 ):
     """
-    Compute the observed cell-type by cell-type neighbor connectivity
-    matrix across *all* regions in the dataset (no model/label split).
+    Compute the observed cell-type by cell-type neighbor connectivity matrix across *all* regions in the dataset (no model/label split).
 
     This is the all-vs-all counterpart of `ct_by_ct_obs_matrix`: instead
     of comparing two model/label groups (e.g. label 1 vs. label 2), every
@@ -262,7 +246,7 @@ def cell_type_obs_matrix(
 
     Returns
     -------
-    obs_df : pandas.DataFrame (n_ct × n_ct)
+    obs_df : pandas.DataFrame (n_ct x n_ct)
         Observed cross-cell-type neighbor fractions.
 
         Entry (i, j) is:
@@ -272,7 +256,7 @@ def cell_type_obs_matrix(
 
         Rows may contain NaNs if CT i has zero edges.
 
-    cross : numpy.ndarray (n_ct × n_ct)
+    cross : numpy.ndarray (n_ct x n_ct)
         Raw weighted edge counts from CT i to CT j.
         Same layout as obs_df, but unnormalized.
 
@@ -287,13 +271,12 @@ def cell_type_obs_matrix(
         Cell type code (0..n_ct-1) for every region in region_adata.obs.
 
     C : scipy.sparse.csr_matrix
-        Full neighbor graph (n_regions × n_regions).
+        Full neighbor graph (n_regions x n_regions).
 
     G : scipy.sparse.csr_matrix
         One-hot membership matrix for all regions:
-        shape = (n_regions × n_ct)
+        shape = (n_regions x n_ct)
     """
-
     if conn_key not in region_adata.obsp:
         neighbors(region_adata)
 
@@ -308,35 +291,25 @@ def cell_type_obs_matrix(
     n = len(ct_codes)
 
     # One-hot membership matrix for all regions
-    G = sp.csr_matrix(
-        (np.ones_like(ct_codes, dtype=np.float32),
-         (np.arange(n), ct_codes)),
-        shape=(n, n_ct)
-    )
+    G = sp.csr_matrix((np.ones_like(ct_codes, dtype=np.float32), (np.arange(n), ct_codes)), shape=(n, n_ct))
 
     # cross edges: (ct_i x ct_j), over all regions
     cross = (G.T @ (C @ G)).toarray()
 
     # denom: total weight from CT i to any region
-    denom_vec = (G.T @ (C @ np.ones((n, 1), dtype=np.float32)))
+    denom_vec = G.T @ (C @ np.ones((n, 1), dtype=np.float32))
     denom = np.asarray(denom_vec).ravel()
 
     # Avoid divide-by-zero for rare CTs
     obs_mat = np.divide(cross, denom[:, None], out=np.full_like(cross, np.nan), where=(denom[:, None] > 0))
 
-    obs_df = pd.DataFrame(obs_mat, index=ct_list, columns=ct_list)
+    obs_df = pd.DataFrame(obs_mat, index=np.array(ct_list), columns=np.array(ct_list))
     return obs_df, cross, denom, ct_list, ct_codes, C, G
 
-def cell_type_nes(
-    region_adata,
-    n_perm=200,
-    seed=0,
-    ct_key="cell_type",
-    conn_key="connectivities"
-):
+
+def cell_type_nes(region_adata, n_perm=200, seed=0, ct_key="cell_type", conn_key="connectivities"):
     """
-    Compute normalized enrichment scores (NES) for all-vs-all
-    cell-type connectivity using permutation testing.
+    Compute normalized enrichment scores (NES) for all-vs-all cell-type connectivity using permutation testing.
 
     This is the all-vs-all counterpart of `ct_by_ct_nes`: instead of
     comparing two model/label groups, it evaluates, for every cell
@@ -364,7 +337,6 @@ def cell_type_nes(
         Same meaning as in `cell_type_obs_matrix`.
 
     """
-
     obs_df, cross, denom, ct_list, ct_codes0, C, G = cell_type_obs_matrix(
         region_adata,
         ct_key=ct_key,
@@ -381,7 +353,7 @@ def cell_type_nes(
 
     # Online mean/var (Welford)
     mean = np.zeros((n_ct, n_ct), dtype=np.float64)
-    M2   = np.zeros((n_ct, n_ct), dtype=np.float64)
+    M2 = np.zeros((n_ct, n_ct), dtype=np.float64)
 
     denom_safe = denom.astype(np.float64)
     denom_safe[denom_safe == 0] = np.nan  # keep divisions sane
@@ -392,13 +364,11 @@ def cell_type_nes(
         # Build permuted "target"-side one-hot membership (sparse);
         # the "source" side (G) is kept fixed to the real labels.
         G_perm = sp.csr_matrix(
-            (np.ones_like(perm_codes, dtype=np.float32),
-             (np.arange(n), perm_codes)),
-            shape=(n, n_ct)
+            (np.ones_like(perm_codes, dtype=np.float32), (np.arange(n), perm_codes)), shape=(n, n_ct)
         )
 
         cross_p = (G.T @ (C @ G_perm)).toarray().astype(np.float64)
-        frac_p = cross_p / denom_safe[:, None]   # (ct_i x ct_j)
+        frac_p = cross_p / denom_safe[:, None]  # (ct_i x ct_j)
 
         # update online mean/var
         delta = frac_p - mean
@@ -413,14 +383,13 @@ def cell_type_nes(
     nes[sd == 0] = np.nan
 
     nes_df = pd.DataFrame(nes, index=ct_list, columns=ct_list)
-    mu_df  = pd.DataFrame(mean, index=ct_list, columns=ct_list)
-    sd_df  = pd.DataFrame(sd, index=ct_list, columns=ct_list)
+    mu_df = pd.DataFrame(mean, index=ct_list, columns=ct_list)
+    sd_df = pd.DataFrame(sd, index=ct_list, columns=ct_list)
 
-    region_adata.uns['cell_type_nes'] = {
-        'obs': obs_df,
-        'nes': nes_df,
-        'mu': mu_df,
-        'sd': sd_df,
+    region_adata.uns["cell_type_nes"] = {
+        "obs": obs_df,
+        "nes": nes_df,
+        "mu": mu_df,
+        "sd": sd_df,
     }
     return
-

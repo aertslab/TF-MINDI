@@ -23,7 +23,10 @@ project_name = "TF-MInDi"
 author = info["Author"]
 copyright = f"{datetime.now():%Y}, {author}."
 version = info["Version"]
-urls = dict(pu.split(", ") for pu in info.get_all("Project-URL"))
+info_project_urls = info.get_all("Project-URL")
+if info_project_urls is None:
+    raise ValueError("No project urls found!")
+urls = dict(pu.split(", ") for pu in info_project_urls)
 repository_url = urls["Source"]
 
 # The full version, including alpha/beta/rc tags

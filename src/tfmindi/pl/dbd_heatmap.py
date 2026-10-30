@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
@@ -129,7 +131,7 @@ def dbd_heatmap(
         spine.set_color("black")
         spine.set_linewidth(1)
 
-    render_kwargs = {
+    render_kwargs: dict[str, Any] = {
         "title": "DBD Counts per Cell Type",
         **kwargs,
     }

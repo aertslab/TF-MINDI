@@ -8,15 +8,15 @@ import gzip
 import re
 import tarfile
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from dataclasses import dataclass
 from io import TextIOWrapper
 from pathlib import Path
 from typing import IO, Literal, cast
 
 import numpy as np
-import pandas as pd  # type: ignore
-import pooch  # type: ignore
+import pandas as pd
+import pooch
 
 _motif_index = None
 
@@ -411,7 +411,8 @@ def load_motif_annotations(
     ['Direct_annot', 'Motif_similarity_annot', 'Orthology_annot', 'Motif_similarity_and_Orthology_annot']
     """
     # Load as pandas DataFrame
-    df = pd.read_csv(annotations_file, sep="\t", usecols=column_names)
+    df = pd.read_csv(annotations_file, sep="\t", usecols=column_names)  # ty: ignore[no-matching-overload]
+    assert isinstance(df, pd.DataFrame)
     df.rename(
         columns={
             "#motif_id": "MotifID",
@@ -614,7 +615,7 @@ class MotifCollectionData:
             raise ValueError(msg)
 
     @contextlib.contextmanager
-    def _open_member(self, member: str, kind: str) -> Iterator[IO[bytes]]:
+    def _open_member(self, member: str, kind: str) -> Generator[IO[bytes]]:
         """Open a member of the tar archive, raising a uniform error if it is absent.
 
         Parameters
@@ -773,7 +774,7 @@ class MotifCollectionData:
         """
         if isinstance(n_motifs_per_cluster, int):
             n_motifs_per_cluster = str(n_motifs_per_cluster)
-        return list(self.get_pca_data(n_motifs_per_cluster).var_names)  # type: ignore
+        return list(self.get_pca_data(n_motifs_per_cluster).var_names)
 
     def get_motifs(self, n_motifs_per_cluster: int | str | None) -> dict[tuple[str, str], np.ndarray]:
         """
@@ -800,7 +801,7 @@ class MotifCollectionData:
             return load_motif_collection(
                 motif_file=stream,  # type: ignore
                 motif_names=motifs_to_keep,
-                motif_file_format=self._motif_file_format,  # type: ignore
+                motif_file_format=self._motif_file_format,
             )
 
     @property

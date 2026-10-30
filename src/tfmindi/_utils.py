@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 from anndata import AnnData
 
 from tfmindi.backends import run_accelerated, to_numpy
 
+# _XDataType is anndata's private alias for every layout it stores in .X. Importing it for
+# type checking only means a rename upstream cannot break the import.
+if TYPE_CHECKING:
+    import pandas as pd
+    from anndata.typing import _XDataType
 
-def accelerated_tsne(X: np.ndarray, **kwargs) -> np.ndarray:
+
+def accelerated_tsne(X: _XDataType | pd.DataFrame, **kwargs) -> np.ndarray:
     """Compute a t-SNE embedding, on the GPU when that backend is active.
 
     t-SNE is the one step the package runs on several different matrices (seqlets,

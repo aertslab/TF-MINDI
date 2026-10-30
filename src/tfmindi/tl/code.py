@@ -4,6 +4,7 @@ from collections.abc import Callable, Hashable
 from typing import Any
 
 import anndata as ad
+import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr
 from tqdm import tqdm
@@ -421,5 +422,5 @@ def correlate_tf_expression(
             )
 
     return pd.DataFrame(
-        l_cluster_tf_corr, columns=["motif_collection_cluster", "transcription_factor", "correlation_coef"]
+        l_cluster_tf_corr, columns=np.array(["motif_collection_cluster", "transcription_factor", "correlation_coef"])
     )

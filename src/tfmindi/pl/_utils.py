@@ -35,8 +35,8 @@ def _generate_random_colors(n_colors: int, seed: int = 42) -> list[str]:
 
 def render_plot(
     fig: plt.Figure,
-    width: int = 8,
-    height: int = 8,
+    width: float = 8,
+    height: float = 8,
     title: str | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,

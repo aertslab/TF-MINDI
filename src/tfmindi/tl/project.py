@@ -4,15 +4,36 @@ import warnings
 from typing import Any, Literal
 
 import numpy as np
-from anndata import AnnData  # type: ignore
-from pynndescent import NNDescent  # type: ignore
+from anndata import AnnData
+from pynndescent import NNDescent
 from scipy import sparse
 
 from tfmindi.backends import run_accelerated, to_numpy
 from tfmindi.datasets import MotifCollectionData
 
+# Similarity matrices reach the projection helpers either dense or as CSR, see _as_dense_or_csr.
+SimilarityMatrix = np.ndarray | sparse.csr_matrix | sparse.csr_array
+_CSR_TYPES = (sparse.csr_matrix, sparse.csr_array)
 
-def _project_in_reference(X_sim: np.ndarray | sparse.csr_array, ref_pcs: np.ndarray) -> np.ndarray:
+
+def _as_dense_or_csr(X: Any) -> SimilarityMatrix:
+    """Normalize an AnnData ``.X`` to the two layouts the projection helpers accept.
+
+    Parameters
+    ----------
+    X
+        Seqlet x reference-motif similarities in any layout AnnData stores.
+
+    Returns
+    -------
+    A CSR matrix if ``X`` is sparse, sharing its buffers when it already is CSR, else a dense array.
+    """
+    if sparse.issparse(X):
+        return sparse.csr_matrix(X)
+    return np.asarray(X)
+
+
+def _project_in_reference(X_sim: SimilarityMatrix, ref_pcs: np.ndarray) -> np.ndarray:
     """Project seqlet similarities onto the reference principal components.
 
     Row-centering a sparse matrix would destroy its sparsity, but the projection of a
@@ -30,7 +51,7 @@ def _project_in_reference(X_sim: np.ndarray | sparse.csr_array, ref_pcs: np.ndar
     -------
     Dense projected coordinates, shape (n_seqlets, n_PCs).
     """
-    if sparse.issparse(X_sim):
+    if isinstance(X_sim, _CSR_TYPES):
         row_means = np.asarray(X_sim.mean(axis=1)).ravel()
         return X_sim @ ref_pcs - np.outer(row_means, ref_pcs.sum(axis=0))
     X_sim_center = X_sim - X_sim.mean(1)[:, None]
@@ -74,7 +95,7 @@ def _row_chunk_bounds(indptr: np.ndarray, max_nnz: int) -> list[int]:
 
 
 def _project_in_reference_gpu(
-    X_sim: np.ndarray | sparse.csr_array,
+    X_sim: SimilarityMatrix,
     ref_pcs: np.ndarray,
     chunk_bytes: int = _PROJECTION_CHUNK_BYTES,
 ) -> Any:
@@ -119,12 +140,11 @@ def _project_in_reference_gpu(
     n_rows = X_sim.shape[0]
     out = cp.empty((n_rows, pcs.shape[1]), dtype=cp.float32)
 
-    if sparse.issparse(X_sim):
-        X_csr = X_sim if X_sim.format == "csr" else X_sim.tocsr()
+    if isinstance(X_sim, _CSR_TYPES):
         # 8 bytes per nonzero: float32 values alongside int32 column indices.
-        bounds = _row_chunk_bounds(X_csr.indptr, max(chunk_bytes // 8, 1))
+        bounds = _row_chunk_bounds(X_sim.indptr, max(chunk_bytes // 8, 1))
         for start, stop in zip(bounds[:-1], bounds[1:], strict=True):
-            block = X_csr[start:stop]
+            block = X_sim[start:stop]
             X_gpu = cusparse.csr_matrix(
                 (
                     cp.asarray(block.data, dtype=cp.float32),
@@ -316,7 +336,7 @@ def _predict_label_gpu(
 _MIN_PROFILE_DENSITY = 0.5
 
 
-def _warn_if_profiles_pruned(X_sim: np.ndarray | sparse.csr_array) -> None:
+def _warn_if_profiles_pruned(X_sim: SimilarityMatrix) -> None:
     """Warn when the similarity profiles are too sparse for the reference projection to hold.
 
     Parameters
@@ -330,7 +350,7 @@ def _warn_if_profiles_pruned(X_sim: np.ndarray | sparse.csr_array) -> None:
         Emits a :class:`UserWarning` when the stored fraction is below
         :data:`_MIN_PROFILE_DENSITY`.
     """
-    if not sparse.issparse(X_sim):
+    if not isinstance(X_sim, _CSR_TYPES):
         return
     n_rows, n_cols = X_sim.shape
     density = X_sim.nnz / (n_rows * n_cols) if n_rows and n_cols else 1.0
@@ -437,7 +457,7 @@ def predict_tf_family_seqlets(
     proj_key = f"X_ref_proj_{n_motifs_per_reference_cluster}"
     if proj_key in adata.obsm and not recompute:
         print(f"Reusing existing reference projection in obsm['{proj_key}'] ...")
-        X_pca_proj = adata.obsm[proj_key]
+        X_pca_proj = np.asarray(adata.obsm[proj_key])
     else:
         # Only the rebuild path touches the similarity matrix, so a cached projection stays
         # usable after `.X` has been pruned down or replaced entirely.
@@ -446,7 +466,7 @@ def predict_tf_family_seqlets(
             raise ValueError("Not all reference motifs in adata.")
 
         # Left sparse on purpose: both projection helpers center without densifying.
-        X_sim = adata[:, ref_motif_names].X  # type: ignore
+        X_sim = _as_dense_or_csr(adata[:, ref_motif_names].X)
         _warn_if_profiles_pruned(X_sim)
         X_pca_proj = run_accelerated(
             "reference projection",
@@ -455,16 +475,10 @@ def predict_tf_family_seqlets(
         )
         adata.obsm[proj_key] = to_numpy(X_pca_proj)
 
-    predict_kwargs = dict(
-        X_pca_proj=X_pca_proj,
-        ref_pca=pca_data.pca,
-        labels=labels,
-        **kwargs,
-    )
     pred_label, pred_score = run_accelerated(
         "KNN family prediction",
-        lambda: _predict_label_gpu(**predict_kwargs),  # type: ignore[arg-type]
-        lambda: _predict_label_cpu(**predict_kwargs),  # type: ignore[arg-type]
+        lambda: _predict_label_gpu(X_pca_proj=X_pca_proj, ref_pca=pca_data.pca, labels=labels, **kwargs),
+        lambda: _predict_label_cpu(X_pca_proj=X_pca_proj, ref_pca=pca_data.pca, labels=labels, **kwargs),
     )
     # Build the cluster -> family lookup once. A scalar .loc per seqlet constructs a new
     # Series each time, which dominates runtime at millions of seqlets.
@@ -485,7 +499,7 @@ def predict_tf_family_seqlets(
 
     adata.obs[key_cluster] = pred_label
     adata.obs[key_score] = pred_score
-    adata.obs[key_fam] = pred_fam  # type: ignore
+    adata.obs[key_fam] = pred_fam
 
     print("Added following keys to adata.obs: ")
     print(f"\t{key_cluster}")

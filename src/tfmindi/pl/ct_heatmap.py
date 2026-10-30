@@ -1,7 +1,10 @@
-import numpy as np
-import pandas as pd
+from typing import Any
+
 import matplotlib.pyplot as plt
+import numpy as np
+
 from tfmindi.pl._utils import render_plot
+
 
 def ct_by_ct_heatmap(
     region_adata,
@@ -9,13 +12,12 @@ def ct_by_ct_heatmap(
     label_2=None,
     sort_by_strength=False,
     row_order=None,
-    col_order = None,
-    cmap='Reds',
+    col_order=None,
+    cmap="Reds",
     **kwargs,
-    ):
+):
     """
-    Plot the normalized enrichment score for the local connectivites of cell types 
-    of label_1 and label_2 based on a region-level neighbor graph.
+    Plot the normalized enrichment score for the local connectivites of cell types of label_1 and label_2 based on a region-level neighbor graph.
 
     Parameters
     ----------
@@ -28,55 +30,54 @@ def ct_by_ct_heatmap(
             - 'obs': observed cross-model neighbor fractions (pandas.DataFrame)
             - 'nes': normalized enrichment scores (pandas.DataFrame)
             - 'mu': mean values (pandas.DataFrame)
-            - 'sd': standard deviation values (pandas.DataFrame)    
-    
+            - 'sd': standard deviation values (pandas.DataFrame)
+
     label_1 : str
-        Label used for first collection of cell type regions in region_adata.obs[model_key]. 
+        Label used for first collection of cell type regions in region_adata.obs[model_key].
         If not provided will be retrieved from anndata object.
-    
+
     label_2 : str
         Label used for second collection of cell type regions in region_adata.obs[model_key].
         If not provided will be retrieved from anndata object.
 
     row_order : list of strings, optional
         Order of rows (cell types of label_1) to display in the heatmap.
-    
+
     col_order : list of strings, optional
         Order of columns (cell types of label_2) to display in the heatmap.
-    
+
     cmap : str, optional
         Colormap for the heatmap. Default is 'Reds'.
     """
-
     ## Filter out invalid rows and columns (all NaN) from the NES dataframe
-    nes_df = region_adata.uns['ct_by_ct']['nes']
+    nes_df = region_adata.uns["ct_by_ct"]["nes"]
     nes_df = nes_df[~nes_df.isna().all(axis=1)]
-    nes_df = nes_df.loc[:,~nes_df.isna().all()]
+    nes_df = nes_df.loc[:, ~nes_df.isna().all()]
 
     if sort_by_strength:
-        nes_df = nes_df[nes_df.max(axis=0).sort_values(ascending=False).index] ## Column order
+        nes_df = nes_df[nes_df.max(axis=0).sort_values(ascending=False).index]  ## Column order
         row_order = np.argsort(np.argmax(nes_df, 1))
-        nes_df = nes_df.iloc[row_order, :]    
+        nes_df = nes_df.iloc[row_order, :]
     else:
         if (col_order is not None) & (row_order is not None):
             nes_df = nes_df[col_order]
             nes_df = nes_df.loc[row_order, :]
         elif (col_order is not None) & (row_order is None):
             nes_df = nes_df[col_order]
-            row_order = np.argsort(np.argmax(nes_df, 1))    ## Sort the rows
+            row_order = np.argsort(np.argmax(nes_df, 1))  ## Sort the rows
             nes_df = nes_df.iloc[row_order, :]
         elif (col_order is None) & (row_order is not None):
             nes_df = nes_df.loc[row_order, :]
-            column_order = np.argsort(np.argmax(nes_df, 0)) ## Sort the columns
+            column_order = np.argsort(np.argmax(nes_df, 0))  ## Sort the columns
             nes_df = nes_df[nes_df.columns[column_order]]
         else:
-            column_order = np.argsort(np.argmax(nes_df, 0)) ## Sort both
+            column_order = np.argsort(np.argmax(nes_df, 0))  ## Sort both
             nes_df = nes_df[nes_df.columns[column_order]]
 
-    if label_1 == None:
-        label_1 = region_adata.uns['ct_by_ct']['label_1']
-    if label_2 == None:
-        label_2 = region_adata.uns['ct_by_ct']['label_2']
+    if label_1 is None:
+        label_1 = region_adata.uns["ct_by_ct"]["label_1"]
+    if label_2 is None:
+        label_2 = region_adata.uns["ct_by_ct"]["label_2"]
 
     fig = plt.figure()
     grid = fig.add_gridspec(
@@ -101,24 +102,24 @@ def ct_by_ct_heatmap(
     fig.colorbar(image, cax=cbar_ax, orientation="horizontal")
     cbar_ax.xaxis.set_ticks_position("bottom")
     cbar_ax.set_title("Normalized\nEnrichment Score (NES)", pad=8)
-    
-    render_kwargs = {
+
+    render_kwargs: dict[str, Any] = {
         "title": f"Region connectivity between {label_1} and {label_2} cell types",
         **kwargs,
     }
 
     return render_plot(fig, **render_kwargs)
 
+
 def cell_type_nes_heatmap(
     region_adata,
     row_order=None,
     col_order=None,
-    cmap='Reds',
+    cmap="Reds",
     **kwargs,
-    ):
+):
     """
-    Plot the normalized enrichment score for the all-vs-all local
-    connectivities of cell types based on a region-level neighbor graph.
+    Plot the normalized enrichment score for the all-vs-all local connectivities of cell types based on a region-level neighbor graph.
 
     Parameters
     ----------
@@ -141,11 +142,10 @@ def cell_type_nes_heatmap(
     cmap : str, optional
         Colormap for the heatmap. Default is 'Reds'.
     """
-
     ## Filter out invalid rows and columns (all NaN) from the NES dataframe
-    nes_df = region_adata.uns['cell_type_nes']['nes']
+    nes_df = region_adata.uns["cell_type_nes"]["nes"]
     nes_df = nes_df[~nes_df.isna().all(axis=1)]
-    nes_df = nes_df.loc[:,~nes_df.isna().all()]
+    nes_df = nes_df.loc[:, ~nes_df.isna().all()]
 
     if (col_order is not None) & (row_order is not None):
         nes_df = nes_df[col_order]
@@ -157,7 +157,7 @@ def cell_type_nes_heatmap(
         nes_df = nes_df.loc[row_order, :]
         nes_df = nes_df[row_order]
     else:
-        column_order = np.argsort(np.argmax(nes_df, 0)) ## Sort both
+        column_order = np.argsort(np.argmax(nes_df, 0))  ## Sort both
         nes_df = nes_df[nes_df.columns[column_order]]
         nes_df = nes_df.iloc[column_order, :]
 
@@ -185,7 +185,7 @@ def cell_type_nes_heatmap(
     cbar_ax.xaxis.set_ticks_position("bottom")
     cbar_ax.set_title("Normalized\nEnrichment Score (NES)", pad=8)
 
-    render_kwargs = {
+    render_kwargs: dict[str, Any] = {
         "title": "All-vs-all region connectivity between cell types",
         **kwargs,
     }

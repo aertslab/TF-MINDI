@@ -141,7 +141,7 @@ def _normalize_tracks(X: np.ndarray, mode: str = "q99") -> np.ndarray:
 
 
 # Shared caller output contract: one row per seqlet with these columns.
-_SEQLET_COLS = ["example_idx", "start", "end", "attribution", "score"]
+_SEQLET_COLS = np.array(["example_idx", "start", "end", "attribution", "score"])
 
 
 def _seqlet_df(rows) -> pd.DataFrame:
@@ -650,7 +650,7 @@ def _prepare_motifs_for_finemo(
         else:
             start_fwd, end_fwd = int(pass_inds.min()), int(pass_inds.max()) + 1
 
-        ic_scaled_trimmed_motifs[motif_id] = (icm_fwd, start_fwd, end_fwd, motif_len)
+        ic_scaled_trimmed_motifs[motif_id] = (icm_fwd, start_fwd, end_fwd, motif_len)  # type: ignore
         max_width = max(max_width, motif_len)
 
     motif_data: list[_FinemoMotifMetadata] = []
@@ -811,7 +811,10 @@ class finemo_fit_contrib(_FitContribSeqletCaller):  # noqa: D101
         if not is_gpu_available():
             print("WARNING: No GPU available! Finemo is GPU optimized.")
 
-        import finemo
+        try:
+            import finemo  # type: ignore
+        except ImportError as e:
+            raise ValueError("finemo not install, install using pip install tfmindi[finemo]") from e
 
         print("Preparing motifs for finemo ...")
         motif_metadata, icms, trim_masks = _prepare_motifs_for_finemo(
@@ -1006,6 +1009,8 @@ def _seqlet_slices(adata: AnnData, seqlet_idxs: Sequence[int] | np.ndarray, *col
     """
     if "unique_examples" not in adata.uns:
         raise ValueError("No unique_examples found in adata.uns. Use the new storage format.")
+    if not isinstance(adata.obs, pd.DataFrame):
+        raise ValueError(f"adata.obs is expected to be a pd.DataFrame, not {type(adata.obs)}")
     missing = [col for col in columns if col not in adata.obs.columns]
     if missing:
         raise ValueError(f"Missing required columns in adata.obs: {missing}. Use the new storage format.")
@@ -1400,7 +1405,7 @@ def calculate_motif_similarity(
 
         l_sim = _log_similarity(sim)
 
-        if ref_perm is not None:
+        if ref_perm is not None and ref_pcs is not None:
             # Restrict to the reference motifs, drop what the ordinary threshold would have
             # dropped, and project. Centering uses the same rank-1 identity as tl.project, over
             # the reference columns only, so the result matches projecting the unpruned matrix.
@@ -1538,7 +1543,7 @@ def create_seqlet_adata(
     (295, 17995)
     """
     # Validate inputs
-    n_seqlets = similarity_matrix.shape[0]  # type: ignore
+    n_seqlets = similarity_matrix.shape[0]
     if n_seqlets != len(seqlet_metadata):
         raise ValueError(
             f"Number of seqlets in similarity matrix ({n_seqlets}) "
@@ -1550,7 +1555,7 @@ def create_seqlet_adata(
     obs_df.index = obs_df.index.astype(str)
 
     # Create var DataFrame for motifs
-    n_motifs = similarity_matrix.shape[1]  # type: ignore
+    n_motifs = similarity_matrix.shape[1]
     if motif_names is not None and len(motif_names) != n_motifs:
         raise ValueError(
             f"Number of motif names ({len(motif_names)}) "
@@ -1566,7 +1571,7 @@ def create_seqlet_adata(
         var_names = [name[1] if isinstance(name, tuple) else name for name in motif_names]
     else:
         file_names = var_names = [f"motif_{i}" for i in range(n_motifs)]
-    var_df = pd.DataFrame(index=var_names)
+    var_df = pd.DataFrame(index=np.array(var_names))
 
     # Store motif PPMs in .var if provided
     if motif_collection is not None:
@@ -1578,7 +1583,7 @@ def create_seqlet_adata(
             )
 
         # Apply dtype conversion to motif PPMs for memory optimization
-        var_df["motif_ppm"] = [ppm.astype(dtype, copy=False) for ppm in motif_ppms]  # type: ignore
+        var_df["motif_ppm"] = [ppm.astype(dtype, copy=False) for ppm in motif_ppms]
 
     # Store motif annotations in .var if provided. reindex aligns the whole table in one
     # pass; assigning per motif per column was ~18k x n_columns scalar .loc lookups into a
@@ -1770,7 +1775,7 @@ def recursive_seqlets(
                 seqlets.extend(future.result())
 
     columns = ["example_idx", "start", "end", "attribution", "p-value"]
-    seqlets = pd.DataFrame(seqlets, columns=columns)
+    seqlets = pd.DataFrame(seqlets, columns=np.array(columns))
     return seqlets.sort_values("p-value").reset_index(drop=True)
 
 

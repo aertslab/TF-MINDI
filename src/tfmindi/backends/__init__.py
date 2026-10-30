@@ -27,7 +27,7 @@ def _check_gpu_availability() -> bool:
 
         device_count = cp.cuda.runtime.getDeviceCount()
         _gpu_available = device_count > 0
-        return _gpu_available  # type: ignore
+        return _gpu_available
     except Exception:  # noqa: BLE001 - probing for a GPU must never be able to fail
         # Not just ImportError: cupy imports fine on a machine with no driver, or with one
         # too old for the runtime it was built against, and only raises when the runtime is
@@ -60,7 +60,7 @@ def get_backend() -> str:
     # Check environment variable
     env_backend = os.getenv("TFMINDI_BACKEND", "").lower()
     if env_backend in ["cpu", "gpu"]:
-        _backend = env_backend  # type: ignore
+        _backend = env_backend
         if _backend == "gpu" and not _check_gpu_availability():
             warnings.warn(
                 "GPU backend requested but GPU packages not available. "
@@ -69,7 +69,7 @@ def get_backend() -> str:
                 stacklevel=2,
             )
             _backend = "cpu"
-        return _backend  # type: ignore
+        return _backend
 
     # Auto-detect based on availability
     _backend = "gpu" if _check_gpu_availability() else "cpu"

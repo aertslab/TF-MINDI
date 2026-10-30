@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Literal
+from typing import Any, Literal
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -38,7 +38,7 @@ def _cluster_sort_key(pattern: Pattern) -> tuple[int, int, str]:
 
 
 def _select_patterns(
-    patterns: dict[str, Pattern],
+    patterns: dict[str, Pattern | None],
     group_by: Literal["annotation"] | None,
     annotation: str | None,
     ic_threshold: float,
@@ -71,7 +71,7 @@ def _select_patterns(
     ValueError
         If the selection is empty, or ``sort_by`` is not a known option.
     """
-    selected = list(patterns.values())
+    selected = [pattern for pattern in patterns.values() if pattern is not None]
 
     if annotation is not None:
         selected = [p for p in selected if p.dbd == annotation]
@@ -122,7 +122,7 @@ def _select_patterns(
 
 
 def pattern_logos(
-    patterns: dict[str, Pattern],
+    patterns: dict[str, Pattern | None],
     group_by: Literal["annotation"] | None = None,
     annotation: str | None = None,
     ic_threshold: float = 0.2,
@@ -241,7 +241,7 @@ def pattern_logos(
     # Scale the canvas with the grid; an explicit width/height still wins. Reserve a
     # strip at the top for the suptitle, which tight_layout does not account for.
     height = kwargs.get("height", _PANEL_HEIGHT * nrows)
-    defaults = {
+    defaults: dict[str, Any] = {
         "title": default_title,
         "width": _PANEL_WIDTH * ncols,
         "height": height,
