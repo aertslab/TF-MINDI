@@ -2,6 +2,7 @@
 
 from tfmindi.tl.cluster import embed_and_cluster
 from tfmindi.tl.code import correlate_tf_expression, get_code_table
+from tfmindi.tl.ct_code_comparison import cell_type_nes, ct_by_ct_nes
 from tfmindi.tl.embedder import (
     calculate_embedding_tsne,
     embed_regions,
@@ -27,6 +28,8 @@ __all__ = [
     "optimal_hierarchical_clustering",
     "get_region_profiles",
     "leiden_clustering",
+    "ct_by_ct_nes",
+    "cell_type_nes",
     "get_code_table",
     "correlate_tf_expression",
 ]

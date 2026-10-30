@@ -34,7 +34,9 @@ def _check_gpu_availability() -> bool:
         # first called. That is the normal state of a CPU node in a mixed cluster, and it
         # has to read as "no GPU" rather than abort the pipeline.
         _gpu_available = False
-        return False
+    except cp.cuda.runtime.CUDARuntimeError:
+        _gpu_available = False
+    return False
 
 
 def get_backend() -> str:
