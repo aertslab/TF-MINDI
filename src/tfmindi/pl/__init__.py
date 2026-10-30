@@ -5,15 +5,14 @@ from tfmindi.pl._utils import (
     get_colors,
     get_point_colors,
     render_plot,
-    reset_colors,
-    set_colors,
 )
+from tfmindi.pl.code import code_table_dotplot, code_table_tf_expression_dotplot
 from tfmindi.pl.contributions import region_contributions
+from tfmindi.pl.ct_heatmap import cell_type_nes_heatmap, ct_by_ct_heatmap
 from tfmindi.pl.dbd_heatmap import dbd_heatmap
-from tfmindi.pl.logo import dbd_cluster_logos, dbd_logos
+from tfmindi.pl.logo import pattern_logos
 from tfmindi.pl.region_topics import dbd_topic_heatmap, plot_top_motifs, region_topic_tsne
 from tfmindi.pl.tsne import region_tsne, tsne, tsne_logos
-from tfmindi.pl.ct_heatmap import ct_by_ct_heatmap, cell_type_nes_heatmap
 
 __all__ = [
     "tsne",
@@ -21,18 +20,16 @@ __all__ = [
     "dbd_heatmap",
     "dbd_topic_heatmap",
     "region_contributions",
-    "dbd_logos",
-    "dbd_cluster_logos",
-    "dbd_topic_heatmap",
+    "pattern_logos",
     "region_topic_tsne",
     "render_plot",
     "ensure_colors",
     "get_colors",
-    "set_colors",
-    "reset_colors",
     "get_point_colors",
     "region_tsne",
     "plot_top_motifs",
     "ct_by_ct_heatmap",
     "cell_type_nes_heatmap",
+    "code_table_dotplot",
+    "code_table_tf_expression_dotplot",
 ]
