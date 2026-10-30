@@ -1,15 +1,35 @@
 """Analysis tools for TF-MInDi."""
 
-from tfmindi.tl.cluster import cluster_seqlets
+from tfmindi.tl.cluster import embed_and_cluster
+from tfmindi.tl.code import correlate_tf_expression, get_code_table
+from tfmindi.tl.ct_code_comparison import cell_type_nes, ct_by_ct_nes
+from tfmindi.tl.embedder import (
+    calculate_embedding_tsne,
+    embed_regions,
+    get_region_profiles,
+    leiden_clustering,
+    optimal_hierarchical_clustering,
+)
 from tfmindi.tl.patterns import create_patterns
+from tfmindi.tl.project import predict_tf_family_seqlets
 from tfmindi.tl.topic_modeling import (
     evaluate_topic_models,
     run_topic_modeling,
 )
 
 __all__ = [
-    "cluster_seqlets",
+    "embed_and_cluster",
     "create_patterns",
     "run_topic_modeling",
     "evaluate_topic_models",
+    "predict_tf_family_seqlets",
+    "embed_regions",
+    "calculate_embedding_tsne",
+    "optimal_hierarchical_clustering",
+    "get_region_profiles",
+    "leiden_clustering",
+    "ct_by_ct_nes",
+    "cell_type_nes",
+    "get_code_table",
+    "correlate_tf_expression",
 ]
