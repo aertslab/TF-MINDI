@@ -1,6 +1,6 @@
 """Plotting functions to visualize cell type-specific enhancer codes."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
 import matplotlib.pyplot as plt
@@ -359,7 +359,7 @@ def code_table_tf_expression_dotplot(
     cell_type_key: str,
     min_correlation_coef: float = 0.4,
     tfs: list[str] | None = None,
-    motif_collection_clusters: list[int | str] | None = None,
+    motif_collection_clusters: Sequence[int | str] | None = None,
     color_by: str = "example_idx",
     color_aggregation_func: Callable | str = "count",
     normalize_color_per_aggregate_by: bool = True,

@@ -134,6 +134,8 @@ def render_plot(
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", "This figure includes Axes that are not compatible with tight_layout")
+        # Raised when the figure is too small for its tick labels; the plot is drawn regardless.
+        warnings.filterwarnings("ignore", "Tight layout not applied")
         if tight_rect:
             fig.tight_layout(rect=tight_rect)
         else:
