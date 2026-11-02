@@ -1,3 +1,5 @@
+"""cell type comparison heatmaps."""
+
 from typing import Any
 
 import matplotlib.pyplot as plt
