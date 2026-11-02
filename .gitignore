@@ -20,6 +20,9 @@ __pycache__/
 # docs
 /docs/generated/
 /docs/_build/
+notebooks_copy
+run_notebooks_slurm.sh
+*.log
 
 # Data files
 *.tar
