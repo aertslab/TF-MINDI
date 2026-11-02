@@ -16,7 +16,7 @@ import pandas as pd
 from anndata import AnnData
 from memelite import tomtom
 from scipy import sparse
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from tfmindi.backends import is_gpu_available, run_accelerated
 from tfmindi.datasets import MotifCollectionData
