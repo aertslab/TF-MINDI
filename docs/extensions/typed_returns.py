@@ -29,4 +29,4 @@ def _parse_returns_section(self: NumpyDocstring, section: str) -> list[str]:
 
 def setup(app: Sphinx):
     """Set app."""
-    NumpyDocstring._parse_returns_section = _parse_returns_section
+    NumpyDocstring._parse_returns_section = _parse_returns_section  # type: ignore

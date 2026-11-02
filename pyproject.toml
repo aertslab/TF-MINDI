@@ -4,8 +4,8 @@ requires = [ "hatchling" ]
 
 [project]
 name = "tfmindi"
-version = "1.2.0"
-description = "TF-MInDi: Transcription Factor Motifs and Instances Discovery"
+version = "2.0.0"
+description = "TF-MINDI: Transcription Factor Motif Instance Neighborhood Decomposition and Interpretation"
 readme = "README.md"
 license = { file = "LICENSE" }
 maintainers = [
@@ -21,6 +21,7 @@ classifiers = [
 ]
 dependencies = [
   "anndata",
+  "distinctipy",
   "h5py>=3.14",
   "igraph",
   "itaxotools-mafftpy>=0.3",
@@ -32,18 +33,21 @@ dependencies = [
   "numpy",
   "pandas",
   "pooch",
-  "pybigwig",
+  "pynndescent>=0.5.13",
   "pywavelets",
   "scanpy",
+  "scikit-learn",
   "scipy",
   "seaborn",
-  "session-info2",
+  "tqdm",
 ]
 optional-dependencies.dev = [ "pre-commit", "twine>=4.0.2" ]
 optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
   "ipykernel",
   "ipython",
+  # Without it tqdm.auto falls back to text progress bars in the tutorial notebooks.
+  "ipywidgets",
   "myst-nb>=1.1",
   "pandas",
   # Until pybtex >0.24.0 releases: https://bitbucket.org/pybtex-devs/pybtex/issues/169/
@@ -56,10 +60,25 @@ optional-dependencies.doc = [
   "sphinxcontrib-bibtex>=1",
   "sphinxext-opengraph",
 ]
+optional-dependencies.finemo = [
+  "finemo>=0.41",
+  "pyarrow>=19.0.1",
+]
 optional-dependencies.gpu = [
+  # PCA on a matrix with more than int32-many nonzeros has to go through
+  # rapids-singlecell's Dask path; dask itself is only an optional extra of theirs.
+  "dask",
   "rapids-singlecell-cu12[rapids]",
 ]
-optional-dependencies.test = [ "coverage", "pytest" ]
+optional-dependencies.jupyter = [ "ipykernel", "ipywidgets" ]
+optional-dependencies.test = [
+  "coverage",
+  # The finemo caller's tests skip themselves when finemo is absent, which is how a broken
+  # motif-name lookup survived unnoticed in that path. Keep it in the test matrix.
+  "finemo>=0.41",
+  "pyarrow>=19.0.1",
+  "pytest",
+]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://tfmindi.readthedocs.io/"
 urls.Homepage = "https://github.com/aertslab/TF-MInDi"
@@ -122,13 +141,14 @@ lint.ignore = [
   "D105", # __magic__ methods are often self-explanatory, allow missing docstrings
   "D107", # Missing docstring in __init__
   # Disable one in each pair of mutually incompatible rules
-  "D203", # We don’t want a blank line before a class docstring
-  "D213", # <> We want docstrings to start immediately after the opening triple quote
-  "D400", # first line should end with a period [Bug: doesn’t work with single-line docstrings]
-  "D401", # First line should be in imperative mood; try rephrasing
-  "E501", # line too long -> we accept long comment lines; formatter gets rid of long code lines
-  "E731", # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
-  "E741", # allow I, O, l as variable names -> I is the identity matrix
+  "D203",  # We don’t want a blank line before a class docstring
+  "D213",  # <> We want docstrings to start immediately after the opening triple quote
+  "D400",  # first line should end with a period [Bug: doesn’t work with single-line docstrings]
+  "D401",  # First line should be in imperative mood; try rephrasing
+  "E501",  # line too long -> we accept long comment lines; formatter gets rid of long code lines
+  "E731",  # Do not assign a lambda expression, use a def -> lambda expression assignments are convenient
+  "E741",  # allow I, O, l as variable names -> I is the identity matrix
+  "UP047", # PEP 695 type parameters -> pydocstyle cannot parse `def f[T](...)` and reports a false D103
 ]
 lint.per-file-ignores."*/__init__.py" = [ "F401" ]
 lint.per-file-ignores."docs/*" = [ "I" ]
@@ -148,6 +168,9 @@ patch = [ "subprocess" ]
 omit = [
   "**/test_*.py",
 ]
+
+[tool.mypy]
+ignore_missing_imports = true
 
 [tool.cruft]
 skip = [
