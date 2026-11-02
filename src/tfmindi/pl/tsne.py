@@ -127,7 +127,7 @@ def tsne(
 
 def tsne_logos(
     adata: AnnData,
-    patterns: dict[str, Pattern] | None = None,
+    patterns: dict[str, Pattern | None] | None = None,
     color_by: str = "leiden",
     patterns_by: str = "leiden",
     logo_width: float = 1.0,
@@ -248,6 +248,8 @@ def tsne_logos(
             cluster_y = y_coords[positions].mean()
 
             pattern = patterns[cluster_id]
+            if pattern is None:
+                continue
             _add_logo_to_plot(
                 ax,
                 pattern,
