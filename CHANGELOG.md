@@ -10,6 +10,59 @@ and this project adheres to [Semantic Versioning][].
 
 ## Unreleased
 
+### Fixes
+
+- `tfmindi.pl.tsne` and `tfmindi.pl.tsne_logos` no longer raise `KeyError: nan` when the `color_by` column contains missing values.
+
+### Breaking changes
+
+- Plot colors in `adata.uns['<column>_colors']` are now stored as lists aligned with the column's categories (scanpy convention) instead of `{category: color}` dicts, so palettes are shared with `scanpy.pl`. Legacy dicts are converted automatically by `tfmindi.load_h5ad` and the `tfmindi.pl` color functions. `tfmindi.pl.set_colors` now accepts partial dicts.
+
+## 2.0.0
+
+### Breaking changes
+
+- The default seqlet caller changed from the raw recursive algorithm to `"recursive_q99_abs_smooth"`, so seqlet calls differ from previous versions by default. Pass `method="recursive_raw"` to reproduce the old behaviour.
+- The seqlet DataFrame (and the resulting `adata.obs`) column `p-value` was renamed to `score`. For the recursive callers `score = -log10(p)` (higher = more significant); for the other callers it is a caller-specific confidence score, not a p-value.
+- `extract_seqlets` no longer exposes `threshold` and `additional_flanks` as dedicated parameters; they are still accepted as keyword arguments (forwarded to the recursive callers). Positional use of a third argument now sets `method`.
+- The log-likelihood used by `tfmindi.tl.evaluate_topic_models` was accumulating incorrectly (see Bugfixes). Now that it is fixed, the model-selection sweep can pick a **different number of topics** than previous versions did for the same data.
+- `method="finemo_fit_contrib"` now writes a numeric `score` (the strongest hit coefficient of a merged seqlet) instead of a comma-joined string, restoring the shared seqlet-caller column contract. The full per-hit coefficients moved to a new `finemo_hit_coefficients` column.
+- `adata.obs["seqlet_oh"]` and `adata.obs["seqlet_matrix"]` are no longer stored. Both were exact
+  slices of the regions already held in `adata.uns["unique_examples"]`, and are now derived through
+  the new accessors `tfmindi.pp.get_seqlet_oh` / `get_seqlet_ohs` and `get_seqlet_matrix` /
+  `get_seqlet_matrices` (plural forms take an array of row positions and are the fast path).
+  Consequently `create_seqlet_adata` no longer takes a `seqlet_matrices` argument.
+- `adata.uns["unique_examples"]["oh"]` is stored as `uint8` instead of following the `dtype`
+  argument, which now governs only the contribution scores and motif PPMs. One-hot data needs a
+  single bit per entry, and this is the largest array in the object after `.X`. `Seqlet.seq_instance`
+  is `uint8` as a result; its values are unchanged.
+- Pattern files (`save_patterns`) store each region's one-hot once in a file-level `_regions` group
+  keyed by `example_idx`, instead of repeating the full region for every seqlet of every pattern.
+  `_SEQLET_SPEC` is bumped to `2.0`; `load_patterns` still reads `1.0` files.
+- `tfmindi.tl.cluster_seqlets` is replaced by `tfmindi.tl.embed_and_cluster`, which does PCA →
+  neighbours → t-SNE → Leiden and nothing else. The DBD annotation it used to bolt on
+  (`adata.obs["seqlet_dbd"]`, `["cluster_dbd"]`, `["mean_contrib"]`) is gone; per-seqlet TF-family
+  annotation is `tfmindi.tl.predict_tf_family_seqlets`' job.
+- The `dbd_col` / `dbd_column` parameters are renamed to `annotation_col` and no longer default to
+  `"cluster_dbd"`, in `tfmindi.tl.create_patterns`, `tfmindi.tl.run_topic_modeling`,
+  `tfmindi.pl.dbd_heatmap`, `tfmindi.pl.region_contributions` and `tfmindi.pl.dbd_topic_heatmap`.
+  The column written by `predict_tf_family_seqlets` carries the clustering resolution in its name
+  (`predicted_<resolution>_predicted_family`), so no fixed default can be right; the functions that
+  need one now raise and list the candidate columns instead of silently using a stale name.
+  `tfmindi.pl.tsne` / `tsne_logos` default `color_by` to `"leiden"`.
+- `tfmindi.pl.dbd_logos` and `tfmindi.pl.dbd_cluster_logos` are merged into a single
+  `tfmindi.pl.pattern_logos`. `group_by="annotation"` reproduces the former (one representative logo
+  per TF family) and `annotation="bHLH"` the latter (every pattern carrying that annotation);
+  passing neither draws every pattern, which was not previously possible without open-coding a
+  `logomaker` loop — as the analysis tutorial in fact did.
+- Removed `tfmindi.pl.set_colors`, `tfmindi.pl.reset_colors`, `tfmindi.backends.get_array_module`,
+  `tfmindi.backends.to_cpu`, `tfmindi.backends.to_gpu` and the unreferenced `tfmindi.pp.mappings`
+  module — none had a call site in the package, the tests, the notebooks or `paper/`.
+- `tfmindi.tl.run_topic_modeling` no longer adds a permanent `region_id` column to the caller's
+  `adata.obs` as a side effect.
+- `tfmindi.tl.embed_regions(embedding="count")` no longer falls back to a hardcoded
+  `"predicted_5.0_predicted_family"` annotation column.
+
 ### Features
 
 - `tfmindi.tl.predict_tf_family_seqlets` caches the reference projection in
@@ -61,15 +114,10 @@ and this project adheres to [Semantic Versioning][].
   character. This is **5x** faster for a single logo and 6.6-8.9x for a grid of them (55 logos:
   8.1 s -> 1.1 s). The rendered output is pixel-identical.
 
-### Fixes
-
-- `tfmindi.pl.tsne` and `tfmindi.pl.tsne_logos` no longer raise `KeyError: nan` when the `color_by` column contains missing values.
-
 ### Breaking changes
 
 - The default seqlet caller changed from the raw recursive algorithm to `"recursive_q99_abs_smooth"`, so seqlet calls differ from previous versions by default. Pass `method="recursive_raw"` to reproduce the old behaviour.
 - The seqlet DataFrame (and the resulting `adata.obs`) column `p-value` was renamed to `score`. For the recursive callers `score = -log10(p)` (higher = more significant); for the other callers it is a caller-specific confidence score, not a p-value.
-- Plot colors in `adata.uns['<column>_colors']` are now stored as lists aligned with the column's categories (scanpy convention) instead of `{category: color}` dicts, so palettes are shared with `scanpy.pl`. Legacy dicts are converted automatically by `tfmindi.load_h5ad` and the `tfmindi.pl` color functions. `tfmindi.pl.set_colors` now accepts partial dicts.
 - `extract_seqlets` no longer exposes `threshold` and `additional_flanks` as dedicated parameters; they are still accepted as keyword arguments (forwarded to the recursive callers). Positional use of a third argument now sets `method`.
 - The log-likelihood used by `tfmindi.tl.evaluate_topic_models` was accumulating incorrectly (see Bugfixes). Now that it is fixed, the model-selection sweep can pick a **different number of topics** than previous versions did for the same data.
 - `method="finemo_fit_contrib"` now writes a numeric `score` (the strongest hit coefficient of a merged seqlet) instead of a comma-joined string, restoring the shared seqlet-caller column contract. The full per-hit coefficients moved to a new `finemo_hit_coefficients` column.

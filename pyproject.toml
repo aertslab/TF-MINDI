@@ -4,7 +4,7 @@ requires = [ "hatchling" ]
 
 [project]
 name = "tfmindi"
-version = "1.2.0"
+version = "2.0.0"
 description = "TF-MINDI: Transcription Factor Motif Instance Neighborhood Decomposition and Interpretation"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -46,6 +46,8 @@ optional-dependencies.doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
   "ipykernel",
   "ipython",
+  # Without it tqdm.auto falls back to text progress bars in the tutorial notebooks.
+  "ipywidgets",
   "myst-nb>=1.1",
   "pandas",
   # Until pybtex >0.24.0 releases: https://bitbucket.org/pybtex-devs/pybtex/issues/169/
@@ -68,7 +70,7 @@ optional-dependencies.gpu = [
   "dask",
   "rapids-singlecell-cu12[rapids]",
 ]
-optional-dependencies.jupyter = [ "ipykernel" ]
+optional-dependencies.jupyter = [ "ipykernel", "ipywidgets" ]
 optional-dependencies.test = [
   "coverage",
   # The finemo caller's tests skip themselves when finemo is absent, which is how a broken

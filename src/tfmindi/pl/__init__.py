@@ -8,6 +8,7 @@ from tfmindi.pl._utils import (
 )
 from tfmindi.pl.code import code_table_dotplot, code_table_tf_expression_dotplot
 from tfmindi.pl.contributions import region_contributions
+from tfmindi.pl.ct_heatmap import cell_type_nes_heatmap, ct_by_ct_heatmap
 from tfmindi.pl.dbd_heatmap import dbd_heatmap
 from tfmindi.pl.logo import pattern_logos
 from tfmindi.pl.region_topics import dbd_topic_heatmap, plot_top_motifs, region_topic_tsne
@@ -27,6 +28,8 @@ __all__ = [
     "get_point_colors",
     "region_tsne",
     "plot_top_motifs",
+    "ct_by_ct_heatmap",
+    "cell_type_nes_heatmap",
     "code_table_dotplot",
     "code_table_tf_expression_dotplot",
 ]

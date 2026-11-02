@@ -55,6 +55,8 @@ def dbd_topic_heatmap(
     # Check if topic modeling results exist
     if "topic_modeling" not in adata.uns:
         raise ValueError("No topic modeling results found. Run tm.tl.run_topic_modeling() first.")
+    if not isinstance(adata.obs, pd.DataFrame):
+        raise ValueError(f"adata.obs is expected to be a pd.DataFrame (not {type(adata.obs)})")
 
     # Get topic-cluster matrix from stored results
     cluster_topic_matrix = adata.uns["topic_modeling"]["topic_cluster_matrix"]
@@ -98,17 +100,17 @@ def dbd_topic_heatmap(
 
     ax.set_xlabel("Topic")
     ax.set_ylabel("")
-    ax.set_position([0.1, 0.1, 0.65, 0.75])  # [x, y, width, height]
+    ax.set_position((0.1, 0.1, 0.65, 0.75))  # [x, y, width, height]
 
     # Manually create a vertical colorbar to the right of heatmap, aligned with bottom
     heatmap_pos = ax.get_position()
     cbar_ax = fig.add_axes(
-        [
+        (
             heatmap_pos.x1 + 0.3,
             heatmap_pos.y0,
             0.03,
             0.2,
-        ]
+        )
     )
 
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=0, vmax=vmax))

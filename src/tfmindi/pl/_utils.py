@@ -90,8 +90,8 @@ def _legacy_colors_to_list(adata: AnnData, column: str) -> None:
 
 def render_plot(
     fig: plt.Figure,
-    width: int = 8,
-    height: int = 8,
+    width: float = 8,
+    height: float = 8,
     title: str | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,
@@ -189,6 +189,8 @@ def render_plot(
 
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", "This figure includes Axes that are not compatible with tight_layout")
+        # Raised when the figure is too small for its tick labels; the plot is drawn regardless.
+        warnings.filterwarnings("ignore", "Tight layout not applied")
         if tight_rect:
             fig.tight_layout(rect=tight_rect)
         else:

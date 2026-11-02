@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
@@ -22,7 +24,7 @@ def dbd_heatmap(
     linewidths: float = 0.01,
     standard_scale: bool = False,
     **kwargs,
-) -> plt.Figure | None:  # type: ignore[return]
+) -> plt.Figure | None:
     """
     Create a clustered heatmap showing seqlet counts per cell type and DNA-binding domain.
 
@@ -129,7 +131,7 @@ def dbd_heatmap(
         spine.set_color("black")
         spine.set_linewidth(1)
 
-    render_kwargs = {
+    render_kwargs: dict[str, Any] = {
         "title": "DBD Counts per Cell Type",
         **kwargs,
     }

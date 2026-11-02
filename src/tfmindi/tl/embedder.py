@@ -49,7 +49,7 @@ def embed_regions(
     normalised: bool = True,
     noise_factor: float = 0.0,
     tsne: bool = True,
-    save_path: str = None,
+    save_path: str | None = None,
     TSNE_kwargs: dict | None = None,
 ) -> AnnData:
     """
@@ -105,6 +105,9 @@ def embed_regions(
     # Check and clean input
     embedding, secondary, w, n = _sanity_checks_and_fixes(adata, embedding, secondary, weighted, normalised)
 
+    if not isinstance(adata.obs, pd.DataFrame):
+        raise ValueError(f"adata.obs needs to be a pd.DataFrame, not {type(adata.obs)}")
+
     # Calculate weights
     weight_df = _calc_weights(adata, weighted)
 
@@ -125,7 +128,7 @@ def embed_regions(
     # Create region adata object
     region_adata = AnnData(
         X=latent,
-        obs=pd.DataFrame(index=example_idx).merge(
+        obs=pd.DataFrame(index=np.array(example_idx)).merge(
             adata.obs[["example_idx", class_col]].drop_duplicates(), left_index=True, right_on="example_idx", how="left"
         ),
         var=None if feature_names is None else pd.DataFrame(index=pd.Index(feature_names, dtype=str)),
@@ -142,7 +145,7 @@ def embed_regions(
     return region_adata
 
 
-def calculate_embedding_tsne(region_adata: AnnData, TSNE_kwargs: dict) -> None:
+def calculate_embedding_tsne(region_adata: AnnData, TSNE_kwargs: dict | None) -> None:
     """
     Compute a t-SNE embedding of region_adata.X and store it in obsm['TSNE'].
 
@@ -401,19 +404,33 @@ def get_region_profiles(
         - region_adata.uns['normalised_weighted_sum'] : raw numpy array of the
           normalised profiles before DataFrame conversion.
     """
+    if not isinstance(seqlet_adata.obs, pd.DataFrame):
+        raise ValueError(f"seqlet_adata.obs needs to be a pd.DataFrame, not {type(seqlet_adata.obs)}")
+    if not isinstance(region_adata.obs, pd.DataFrame):
+        raise ValueError(f"region_adata.obs needs to be a pd.DataFrame, not {type(region_adata.obs)}")
+
     profile = (
         seqlet_adata.obs[["example_idx", weight_col, annotation_col]]
         .merge(region_adata.obs, on="example_idx", how="left")
-        .pivot_table(index="example_idx", columns=annotation_col, values=weight_col, aggfunc="sum")
+        .pivot_table(index="example_idx", columns=annotation_col, values=weight_col, aggfunc="sum", observed=True)
     )
+    # A categorical annotation_col gives CategoricalIndex columns, which break the merge below
+    # (pandas raises InvalidIndexError when slicing the frame), so fall back to a plain Index.
+    profile.columns = pd.Index(list(profile.columns), name=annotation_col)
 
     region_adata.uns[annotation_col] = list(profile.columns)
 
-    region_adata.obs = region_adata.obs.merge(
+    # merge drops the index; restore it so obs_names survive (left merge on unique keys keeps row order)
+    obs_names = region_adata.obs.index
+    merged_obs = region_adata.obs.merge(
         region_adata.obs[["example_idx"]].merge(profile, on="example_idx", how="left").fillna(0),
         on="example_idx",
         how="left",
     )
+    merged_obs.index = obs_names
+    region_adata.obs = merged_obs
+
+    assert isinstance(region_adata.obs, pd.DataFrame)
 
     # One grouping pass; the same sum was previously evaluated three times.
     cluster_sums = region_adata.obs.groupby(region_cluster_col)[region_adata.uns[annotation_col]].sum()
@@ -431,26 +448,26 @@ def get_region_profiles(
 
 #### Helper functions -----------------------------------------------------------------------------------------
 
-def _sanity_checks_and_fixes(
-        adata: AnnData,
-        embedding: Literal["count","pca","vae"] = "pca",
-        secondary: int | str | None = None,
-        weighted: bool = True,
-        normalised: bool = True,
-):
-    w = 'weighted' if weighted else 'unweighted'
-    n = 'normalised' if normalised else 'unnormalised'
 
-    vae_keys = [k for k in adata.obsm.keys() if len(k.split('_')) > 1 and k.split('_')[1] == 'vae']
+def _sanity_checks_and_fixes(
+    adata: AnnData,
+    embedding: Literal["count", "pca", "vae"] = "pca",
+    secondary: int | str | None = None,
+    weighted: bool = True,
+    normalised: bool = True,
+):
+    w = "weighted" if weighted else "unweighted"
+    n = "normalised" if normalised else "unnormalised"
+
+    vae_keys = [k for k in adata.obsm.keys() if len(k.split("_")) > 1 and k.split("_")[1] == "vae"]
 
     # --- pca checks ---------------------------------------------------------
     if embedding == "pca":
         assert "X_pca" in adata.obsm, (
-            "Must first reduce seqlet space using pca before aggregating using pca.\n"
-            "tm.tl.reduce_seqlet_space(adata)"
+            "Must first reduce seqlet space using pca before aggregating using pca.\ntm.tl.reduce_seqlet_space(adata)"
         )
         if secondary is None:
-            secondary = DEF_DICT['pca']
+            secondary = DEF_DICT["pca"]
 
     # --- vae checks ---------------------------------------------------------
     elif embedding == "vae":
@@ -460,13 +477,12 @@ def _sanity_checks_and_fixes(
         )
         if secondary is None:
             if len(vae_keys) == 1:
-                secondary = int(vae_keys[0].split('_')[2])
+                secondary = int(vae_keys[0].split("_")[2])
             elif f"X_vae_{DEF_DICT['vae']}" in adata.obsm:
-                secondary = DEF_DICT['vae']
+                secondary = DEF_DICT["vae"]
             else:
                 raise ValueError(
-                    f"Multiple VAE reductions found: {vae_keys}. "
-                    f"Please specify which to use via 'secondary'."
+                    f"Multiple VAE reductions found: {vae_keys}. Please specify which to use via 'secondary'."
                 )
         assert f"X_vae_{secondary}" in adata.obsm, (
             f"VAE reduction with {secondary} latents not found.\n"
@@ -477,12 +493,11 @@ def _sanity_checks_and_fixes(
     # --- count checks -------------------------------------------------------
     elif embedding == "count":
         if secondary is None:
-            secondary = DEF_DICT['count']
+            secondary = DEF_DICT["count"]
             print(f" [embed] No annotation column specified, defaulting to '{secondary}'")
         if secondary not in adata.obs.columns:
             raise KeyError(
-                f"Annotation column '{secondary}' not found in adata.obs.\n"
-                f"Available columns: {list(adata.obs.columns)}"
+                f"Annotation column '{secondary}' not found in adata.obs.\nAvailable columns: {list(adata.obs.columns)}"
             )
 
     print(f" [embed] embedding='{embedding}', secondary='{secondary}', {w}, {n}")
@@ -491,6 +506,9 @@ def _sanity_checks_and_fixes(
 
 
 def _calc_weights(adata: AnnData, weighted: bool) -> pd.DataFrame:
+    if not isinstance(adata.obs, pd.DataFrame):
+        raise ValueError(f"adata.obs needs to be a pd.DataFrame, not {type(adata.obs)}")
+
     weight_df = adata.obs.copy()
     weight_df["weight"] = np.ones(adata.n_obs)
 

@@ -1,7 +1,7 @@
 """Plotting functions to visualize cell type-specific enhancer codes."""
 
-from collections.abc import Callable
-from typing import Literal
+from collections.abc import Callable, Sequence
+from typing import Any, Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -156,7 +156,7 @@ def _dotplot(
             frameon=False,
         )
 
-    render_kwargs = {
+    render_kwargs: dict[str, Any] = {
         "width": figsize[0],
         "height": figsize[1],
         # render_plot resets every tick label rotation, so the default has to be set here.
@@ -359,7 +359,7 @@ def code_table_tf_expression_dotplot(
     cell_type_key: str,
     min_correlation_coef: float = 0.4,
     tfs: list[str] | None = None,
-    motif_collection_clusters: list[int | str] | None = None,
+    motif_collection_clusters: Sequence[int | str] | None = None,
     color_by: str = "example_idx",
     color_aggregation_func: Callable | str = "count",
     normalize_color_per_aggregate_by: bool = True,
@@ -603,13 +603,13 @@ def code_table_tf_expression_dotplot(
     ]
     size_table = pd.DataFrame(
         [avg_expression[tf].to_numpy() for tf in pairs["transcription_factor"]],
-        index=row_labels,
-        columns=cell_types,
+        index=np.array(row_labels),
+        columns=np.array(cell_types),
     )
     color_table = pd.DataFrame(
         [code_table.loc[cluster].to_numpy() for cluster in pairs["motif_collection_cluster"]],
-        index=row_labels,
-        columns=cell_types,
+        index=np.array(row_labels),
+        columns=np.array(cell_types),
     )
 
     if order_diagonal_by is not None and cell_type_order is not None:

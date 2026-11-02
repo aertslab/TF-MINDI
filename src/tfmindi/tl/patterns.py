@@ -11,9 +11,10 @@ from collections import Counter
 from typing import Literal
 
 import numpy as np
-from anndata import AnnData  # type: ignore
-from itaxotools.mafftpy import MultipleSequenceAlignment  # type: ignore
-from memelite import tomtom  # type: ignore
+import pandas as pd
+from anndata import AnnData
+from itaxotools.mafftpy import MultipleSequenceAlignment
+from memelite import tomtom
 
 from tfmindi.backends import run_accelerated
 from tfmindi.pp.seqlets import (
@@ -262,6 +263,9 @@ def create_patterns(
     if missing_idx_cols:
         raise ValueError(f"Missing required index columns in adata.obs: {missing_idx_cols}")
 
+    if not isinstance(adata.obs, pd.DataFrame):
+        raise ValueError(f"adata.obs needs to be a pd.DataFrame, not {type(adata.obs)}")
+
     patterns = {}
     # One grouping pass gives every cluster's row positions; re-deriving them with
     # `adata.obs[by] == cluster` per cluster is O(n_clusters x n_seqlets).
@@ -322,7 +326,7 @@ def create_patterns(
             root_strands = strands[root_idx, :]
             root_offsets = offsets[root_idx, :]
 
-            pattern: Pattern | None = _create_pattern_from_cluster(
+            pattern = _create_pattern_from_cluster(
                 cluster_indices=cluster_indices,
                 cluster_positions=cluster_positions,
                 adata=adata,
@@ -336,7 +340,7 @@ def create_patterns(
             pattern = _create_pattern_from_cluster_kmer(
                 adata=adata,
                 cluster_positions=cluster_positions,
-                cluster=cluster,
+                cluster=cluster_str,
                 cluster_dbd=cluster_dbd,
             )
             patterns[cluster_str] = pattern
@@ -345,7 +349,7 @@ def create_patterns(
                 adata=adata,
                 cluster_indices=cluster_indices,
                 cluster_positions=cluster_positions,
-                cluster=cluster,
+                cluster=cluster_str,
                 cluster_dbd=cluster_dbd,
                 **kwargs,
             )
@@ -552,7 +556,7 @@ def _create_pattern_from_cluster_kmer(
 
 def _create_pattern_from_cluster_mafft(
     adata: AnnData,
-    cluster_indices: list[str],
+    cluster_indices: list[int],
     cluster_positions: np.ndarray,
     cluster: str,
     cluster_dbd: str | None,

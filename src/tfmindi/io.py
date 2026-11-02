@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import pickle
 import warnings
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any, Literal
 
-import h5py  # type: ignore
+import h5py
 import numpy as np
-import pandas as pd  # type: ignore
-from anndata import AnnData, read_h5ad  # type: ignore
+import pandas as pd
+from anndata import AnnData, read_h5ad
 
 from tfmindi.pl._utils import _legacy_colors_to_list
 from tfmindi.types import _PATTERN_SPEC, _SEQLET_SPEC, Pattern, Seqlet
@@ -51,9 +53,9 @@ def _unsanitize_hdf5_keys(data):
 def save_h5ad(
     adata: AnnData,
     filename: str | Path,
-    compression: str | None = None,
+    compression: Literal["gzip", "lzf"] | None = None,
     compression_opts: int | None = None,
-    as_dense: str | None = None,
+    as_dense: Sequence[str] | None = None,
     **kwargs,
 ) -> None:
     """
@@ -75,7 +77,7 @@ def save_h5ad(
     compression_opts
         Compression options
     as_dense
-        Write sparse data as dense arrays
+        Sparse elements to write as dense arrays, e.g. ``("X",)``
     **kwargs
         Additional arguments passed to AnnData.write_h5ad()
 
@@ -87,6 +89,10 @@ def save_h5ad(
     """
     # Stringify the numpy-array columns of .obs and .var, remembering the originals so the
     # caller's object is restored untouched in the finally block below.
+    if not isinstance(adata.obs, pd.DataFrame):
+        raise ValueError(f"adata.obs needs to be a pd.DataFrame, not {type(adata.obs)}")
+    if not isinstance(adata.var, pd.DataFrame):
+        raise ValueError(f"adata.var needs to be a pd.DataFrame, not {type(adata.var)}")
     originals: dict[str, dict[str, pd.Series]] = {}
     for axis, df in (("obs", adata.obs), ("var", adata.var)):
         columns = _numpy_array_columns(df)
@@ -97,24 +103,19 @@ def save_h5ad(
             adata.uns[f"_tfmindi_numpy_array_{axis}_columns"] = columns
 
     # Handle HDF5 key sanitization for .uns dictionary
-    original_uns = adata.uns.copy()
+    original_uns = dict(adata.uns)
     adata.uns.clear()
     adata.uns.update(_sanitize_hdf5_keys(original_uns))
 
     try:
-        # Save using standard AnnData method
-        write_kwargs = {
-            "filename": filename,
-            "compression": compression,
-            "compression_opts": compression_opts,
+        # Save using standard AnnData method; None means anndata's own default of nothing dense.
+        adata.write_h5ad(
+            filename,
+            compression=compression,
+            compression_opts=compression_opts,
+            as_dense=() if as_dense is None else as_dense,
             **kwargs,
-        }
-
-        # Only pass as_dense if it's not None
-        if as_dense is not None:
-            write_kwargs["as_dense"] = as_dense
-
-        adata.write_h5ad(**write_kwargs)
+        )
 
     finally:
         # Restore original data structures
@@ -131,7 +132,7 @@ def save_h5ad(
             adata.uns.pop(f"_tfmindi_numpy_array_{axis}_columns", None)
 
 
-def load_h5ad(filename: str | Path, backed: str | None = None, **kwargs) -> AnnData:
+def load_h5ad(filename: str | Path, backed: Literal["r", "r+"] | bool | None = None, **kwargs) -> AnnData:
     """
     Load AnnData object from H5AD format with restoration of numpy arrays in .obs and .var.
 
@@ -164,8 +165,7 @@ def load_h5ad(filename: str | Path, backed: str | None = None, **kwargs) -> AnnD
     >>> adata = tm.load_h5ad("my_data.h5ad", backed="r")
     """
     # Load using standard AnnData method with memory optimizations
-    load_kwargs = {"backed": backed, **kwargs}
-    adata = read_h5ad(filename, **load_kwargs)
+    adata = read_h5ad(filename, backed=backed, **kwargs)
 
     # Unsanitize HDF5 keys in .uns dictionary
     adata.uns.update(_unsanitize_hdf5_keys(dict(adata.uns)))
@@ -277,14 +277,15 @@ def _read_seqlet(grp: h5py.Group, regions: h5py.Group | None, cache: dict[str, n
         Region arrays already read from ``regions``, so seqlets of the same region share
         one array in memory as they do when patterns are first created.
     """
-    kwargs = {}
+    # Field types come from the file, so they are only known once Seqlet validates them.
+    kwargs: dict[str, Any] = {}
     if grp.attrs["version"] != _SEQLET_SPEC:
         warnings.warn(
             f"The version of the seqlet on disk ({grp.attrs['version']}) does not match with the seqlet version in TF-MInDi ({_SEQLET_SPEC})! Will try to read anyway.",
             stacklevel=1,
         )
     for k in grp.keys():
-        value = grp[k][()]  # type: ignore
+        value = grp[k][()]
         if isinstance(value, bytes):
             value = value.decode("utf-8")
         kwargs[k] = value
@@ -293,14 +294,14 @@ def _read_seqlet(grp: h5py.Group, regions: h5py.Group | None, cache: dict[str, n
     if "region_one_hot" not in kwargs and regions is not None:
         key = str(kwargs["example_idx"])
         if key not in cache:
-            cache[key] = regions[key][()]  # type: ignore
+            cache[key] = regions[key][()]
         kwargs["region_one_hot"] = cache[key]
     return Seqlet(**kwargs)
 
 
 def _load_pattern(grp: h5py.Group, regions: h5py.Group | None, cache: dict[str, np.ndarray]) -> Pattern:
     """Load pattern from h5 group."""
-    kwargs = {}
+    kwargs: dict[str, Any] = {}
     if grp.attrs["version"] != _PATTERN_SPEC:
         warnings.warn(
             f"The version of the pattern on disk ({grp.attrs['version']}) does not match with the pattern version in TF-MInDi ({_PATTERN_SPEC})! Will try to read anyway.",
@@ -309,14 +310,14 @@ def _load_pattern(grp: h5py.Group, regions: h5py.Group | None, cache: dict[str, 
     for k in grp.keys():
         if k == "seqlets":
             continue
-        value = grp[k][()]  # type: ignore
+        value = grp[k][()]
         if isinstance(value, bytes):
             value = value.decode("utf-8")
         kwargs[k] = value
     seqlets: list[Seqlet] = []
     # Sorted to make sure that the order of the seqlets is the same as when they were saved.
-    for seqlet_key in sorted(grp["seqlets"].keys(), key=lambda x: int(x.split("_")[1])):  # type: ignore
-        seqlets.append(_read_seqlet(grp["seqlets"][seqlet_key], regions, cache))  # type: ignore
+    for seqlet_key in sorted(grp["seqlets"].keys(), key=lambda x: int(x.split("_")[1])):
+        seqlets.append(_read_seqlet(grp["seqlets"][seqlet_key], regions, cache))
     kwargs["seqlets"] = seqlets
     return Pattern(**kwargs)
 

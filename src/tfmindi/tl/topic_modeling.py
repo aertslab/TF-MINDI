@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 import lda
+import numpy as np
 import pandas as pd
 from anndata import AnnData
 from scipy.special import gammaln
@@ -101,6 +102,9 @@ def run_topic_modeling(
     >>> tm.pl.dbd_topic_heatmap(adata)
     >>> tm.pl.region_topic_tsne(adata)
     """
+    if not isinstance(adata.obs, pd.DataFrame):
+        raise ValueError(f"adata.obs needs to be a pd.DataFrame, not {type(adata.obs)}")
+
     annotation_col = resolve_annotation_col(adata, annotation_col)
 
     # Check required columns
@@ -148,14 +152,16 @@ def run_topic_modeling(
 
     # Create region-topic matrix
     region_topic = pd.DataFrame(
-        model.doc_topic_, index=count_table.index.values, columns=[f"Topic_{x + 1}" for x in range(model.n_topics)]
+        model.doc_topic_,
+        index=count_table.index.values,
+        columns=np.array([f"Topic_{x + 1}" for x in range(model.n_topics)]),
     )
 
     # Create topic-cluster matrix
     topic_cluster = pd.DataFrame(
         model.topic_word_.T,
         index=count_table.columns.values.astype(str),
-        columns=[f"Topic_{x + 1}" for x in range(model.n_topics)],
+        columns=np.array([f"Topic_{x + 1}" for x in range(model.n_topics)]),
     )
 
     # Store results in AnnData

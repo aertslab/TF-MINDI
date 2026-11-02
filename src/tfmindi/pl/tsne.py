@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import distinctipy as dp
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -113,7 +115,7 @@ def tsne(
     if show_legend:
         _add_legend(ax, scatter, color_map, color_by)
 
-    render_kwargs = {
+    render_kwargs: dict[str, Any] = {
         "xlabel": "t-SNE 1",
         "ylabel": "t-SNE 2",
         "title": "Seqlet Clusters",
@@ -125,7 +127,7 @@ def tsne(
 
 def tsne_logos(
     adata: AnnData,
-    patterns: dict[str, Pattern] | None = None,
+    patterns: dict[str, Pattern | None] | None = None,
     color_by: str = "leiden",
     patterns_by: str = "leiden",
     logo_width: float = 1.0,
@@ -210,6 +212,8 @@ def tsne_logos(
         raise ValueError(f"patterns_by={patterns_by} not in adata.obs")
     if len(set(adata.obs[patterns_by]) & set(patterns.keys())) == 0:
         raise ValueError(f"adata.obs['{patterns_by}'] does not match with patterns.")
+    if not isinstance(adata.obs, pd.DataFrame):
+        raise ValueError(f"adata.obs is expected to be a pd.DataFrame (not {type(adata.obs)})")
 
     # Get t-SNE coordinates
     tsne_coords = adata.obsm["X_tsne"]
@@ -234,6 +238,7 @@ def tsne_logos(
     # Add logos at cluster centroids. One grouping pass instead of a boolean scan of the
     # whole column per cluster.
     for cluster_id, positions in adata.obs.groupby(patterns_by, observed=True).indices.items():
+        assert isinstance(cluster_id, str)
         if cluster_id in patterns:
             # Skip clusters with too few seqlets
             if len(positions) < min_seqlets:
@@ -243,6 +248,8 @@ def tsne_logos(
             cluster_y = y_coords[positions].mean()
 
             pattern = patterns[cluster_id]
+            if pattern is None:
+                continue
             _add_logo_to_plot(
                 ax,
                 pattern,
@@ -261,7 +268,7 @@ def tsne_logos(
         _add_legend(ax, scatter, color_map, color_by)
 
     # Set default values for render_plot, but allow kwargs to override
-    render_kwargs = {
+    render_kwargs: dict[str, Any] = {
         "xlabel": "t-SNE 1",
         "ylabel": "t-SNE 2",
         "title": "Seqlet Clusters",
@@ -316,9 +323,9 @@ def region_tsne(
     plot_labels: bool = True,
     palette: dict | None = None,
     fig_edge: int = 6,
-    dot_size: int = None,
+    dot_size: float | None = None,
     clean: bool = True,
-) -> plt.Figure | None:
+) -> dict:
     """
     Plot a 2D embedding (t-SNE or other) of region_adata coloured by a categorical variable.
 

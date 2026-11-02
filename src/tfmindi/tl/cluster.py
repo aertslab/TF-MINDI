@@ -44,7 +44,7 @@ def _pca_blocked_gpu(adata: AnnData) -> None:
     import dask.array as da  # type: ignore
     from cupyx.scipy.sparse import csr_matrix as csr_gpu  # type: ignore
 
-    X = adata.X if adata.X.format == "csr" else adata.X.tocsr()  # type: ignore[union-attr]
+    X = sparse.csr_matrix(adata.X)
     n_rows, n_cols = X.shape
 
     def _block(start: int, stop: int):
@@ -100,7 +100,11 @@ def _pca_gpu(adata: AnnData) -> None:
     """
     # One attribute read on the ordinary path: matrices below the ceiling go straight through,
     # exactly as before.
-    if sparse.issparse(adata.X) and adata.X.nnz > _CUSPARSE_MAX_NNZ:  # type: ignore[union-attr]
+    X = adata.X
+    # AnnData only stores sparse .X as CSR or CSC. The concrete classes are listed because
+    # spmatrix and sparray are marker mixins that do not themselves declare nnz.
+    sparse_types = sparse.csr_matrix | sparse.csc_matrix | sparse.csr_array | sparse.csc_array
+    if isinstance(X, sparse_types) and X.nnz > _CUSPARSE_MAX_NNZ:
         _pca_blocked_gpu(adata)
     else:
         rapids_singlecell().pp.pca(adata)

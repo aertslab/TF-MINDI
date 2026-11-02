@@ -8,22 +8,24 @@ import gzip
 import re
 import tarfile
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Generator
 from dataclasses import dataclass
+from enum import Enum
 from io import TextIOWrapper
 from pathlib import Path
 from typing import IO, Literal, cast
 
 import numpy as np
-import pandas as pd  # type: ignore
-import pooch  # type: ignore
+import pandas as pd
+import pooch
+from pooch.core import Pooch
 
 _motif_index = None
 
 SUPPORTED_MOTIF_FORMATS = Literal["cbust", "meme"]
 
 
-def _get_motif_index():
+def _get_motif_index() -> Pooch:
     """
     Set up the pooch motif collection registry from pycistarget.
 
@@ -42,6 +44,7 @@ def _get_motif_index():
             registry={
                 # Motif collections
                 "motif_collections/v10nr_clust_public/v10nr_clust_public.zip": "sha256:70dab42794f42471a3c22f5efe78ec2c8af96127656607cb0a929b4adffc2b97",
+                "motif_collections/v11_public/mcv11.refdata.tar.gz": "sha256:5b1d82f4f24a5f738be6b11e5827f30e78f6778ae22ae710e73af1384abb3aa4",
                 # Motif annotations (motifs-v{version}-nr.{species}-m0.001-o0.0.tbl)
                 # v8 (only Drosophila)
                 "motif2tf/motifs-v8-nr.flybase-m0.001-o0.0.tbl": "sha256:ffc550325334507c8ab2f6f79170fd0dfbcbecb33aee96040bf1f386fb3f982d",
@@ -60,9 +63,51 @@ def _get_motif_index():
     return _motif_index
 
 
-def fetch_motif_collection() -> str:
+class MotifCollectionVersion(Enum):
+    """The motif collection version."""
+
+    V10NR_CLUST = 10
+    V11 = 11
+
+    @classmethod
+    def _from_str(cls, s: str) -> MotifCollectionVersion:
+        if s not in ["v10nr_clust", "v11"]:
+            raise ValueError(f"Version: {s} is unknown, use v10nr_clust or v11")
+        return {"v10nr_clust": cls.V10NR_CLUST, "v11": cls.V11}[s]
+
+
+_MOTIF_COLLECTION_MAPPING = {
+    MotifCollectionVersion.V10NR_CLUST: "motif_collections/v10nr_clust_public/v10nr_clust_public.zip",
+    MotifCollectionVersion.V11: "motif_collections/v11_public/mcv11.refdata.tar.gz",
+}
+
+
+def _extract_singletons(fname, action, pooch_obj):
+    """Extract only the singletons folder from the zip file."""
+    extract_dir = Path(fname).parent / Path(fname).stem / "singletons"
+    extract_dir.mkdir(parents=True, exist_ok=True)
+
+    with zipfile.ZipFile(fname, "r") as zip_file:
+        singletons_files = [
+            f for f in zip_file.namelist() if f.startswith("v10nr_clust_public/singletons/") and not f.endswith("/")
+        ]
+        for file_path in singletons_files:
+            file_name = Path(file_path).name
+            with zip_file.open(file_path) as source:
+                with open(extract_dir / file_name, "wb") as target:
+                    target.write(source.read())
+    return str(extract_dir)
+
+
+_MOTIF_COLLECTION_PROCESSOR = {
+    MotifCollectionVersion.V10NR_CLUST: _extract_singletons,
+    MotifCollectionVersion.V11: None,
+}
+
+
+def fetch_motif_collection(name: Literal["v10nr_clust", "v11"] | MotifCollectionVersion) -> str:
     """
-    Download motif collection (motif names and PWM) from aertslab' pycistarget resources.
+    Download motif collection from aertslab' pycistarget resources.
 
     Returns
     -------
@@ -74,32 +119,18 @@ def fetch_motif_collection() -> str:
     >>> print(motif_dir)
     """
     # Mapping of collection names to registry keys
-    name = "v10nr_clust"  # only one collection name
-    collection_mapping = {
-        "v10nr_clust": "motif_collections/v10nr_clust_public/v10nr_clust_public.zip",
-    }
 
-    registry_key = collection_mapping[name]
+    if isinstance(name, MotifCollectionVersion):
+        motif_collection_version = name
+    else:
+        motif_collection_version = MotifCollectionVersion._from_str(name)
 
-    def _extract_singletons(fname, action, pooch_obj):
-        """Extract only the singletons folder from the zip file."""
-        extract_dir = Path(fname).parent / Path(fname).stem / "singletons"
-        extract_dir.mkdir(parents=True, exist_ok=True)
+    registry_key = _MOTIF_COLLECTION_MAPPING[motif_collection_version]
+    processor = _MOTIF_COLLECTION_PROCESSOR[motif_collection_version]
 
-        with zipfile.ZipFile(fname, "r") as zip_file:
-            singletons_files = [
-                f for f in zip_file.namelist() if f.startswith("v10nr_clust_public/singletons/") and not f.endswith("/")
-            ]
-            for file_path in singletons_files:
-                file_name = Path(file_path).name
-                with zip_file.open(file_path) as source:
-                    with open(extract_dir / file_name, "wb") as target:
-                        target.write(source.read())
-        return str(extract_dir)
+    motif_collection_path = _get_motif_index().fetch(registry_key, processor=processor, progressbar=True)
 
-    motif_dir = _get_motif_index().fetch(registry_key, processor=_extract_singletons, progressbar=True)
-
-    return motif_dir
+    return motif_collection_path
 
 
 def fetch_motif_annotations(species: str = "hgnc", version: str = "v10nr_clust") -> str:
@@ -411,7 +442,8 @@ def load_motif_annotations(
     ['Direct_annot', 'Motif_similarity_annot', 'Orthology_annot', 'Motif_similarity_and_Orthology_annot']
     """
     # Load as pandas DataFrame
-    df = pd.read_csv(annotations_file, sep="\t", usecols=column_names)
+    df = pd.read_csv(annotations_file, sep="\t", usecols=column_names)  # ty: ignore[no-matching-overload]
+    assert isinstance(df, pd.DataFrame)
     df.rename(
         columns={
             "#motif_id": "MotifID",
@@ -614,7 +646,7 @@ class MotifCollectionData:
             raise ValueError(msg)
 
     @contextlib.contextmanager
-    def _open_member(self, member: str, kind: str) -> Iterator[IO[bytes]]:
+    def _open_member(self, member: str, kind: str) -> Generator[IO[bytes]]:
         """Open a member of the tar archive, raising a uniform error if it is absent.
 
         Parameters
@@ -773,7 +805,7 @@ class MotifCollectionData:
         """
         if isinstance(n_motifs_per_cluster, int):
             n_motifs_per_cluster = str(n_motifs_per_cluster)
-        return list(self.get_pca_data(n_motifs_per_cluster).var_names)  # type: ignore
+        return list(self.get_pca_data(n_motifs_per_cluster).var_names)
 
     def get_motifs(self, n_motifs_per_cluster: int | str | None) -> dict[tuple[str, str], np.ndarray]:
         """
@@ -800,7 +832,7 @@ class MotifCollectionData:
             return load_motif_collection(
                 motif_file=stream,  # type: ignore
                 motif_names=motifs_to_keep,
-                motif_file_format=self._motif_file_format,  # type: ignore
+                motif_file_format=self._motif_file_format,
             )
 
     @property

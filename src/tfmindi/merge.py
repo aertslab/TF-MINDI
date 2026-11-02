@@ -3,8 +3,8 @@
 from collections.abc import ItemsView
 from typing import Literal
 
-import anndata  # type: ignore
-import numpy as np  # type: ignore
+import anndata
+import numpy as np
 
 # Spelled out rather than imported from anndata._core.merge, which is private and has moved
 # between anndata releases.

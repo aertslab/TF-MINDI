@@ -1,12 +1,14 @@
 """Tools to extract cell type-level enhancer codes."""
 
+import warnings
 from collections.abc import Callable, Hashable
 from typing import Any
 
 import anndata as ad
+import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from tfmindi.datasets import MotifCollectionData
 
@@ -175,7 +177,11 @@ def _pearson(x: Any, y: Any) -> float:
     -------
     The correlation coefficient, NaN if either vector is constant.
     """
-    return pearsonr(x, y).correlation
+    # A constant vector (e.g. a TF not expressed anywhere) is expected and handled downstream as
+    # NaN, so scipy's ConstantInputWarning is just noise.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "An input array is constant")
+        return pearsonr(x, y).correlation
 
 
 def correlate_tf_expression(
@@ -421,5 +427,5 @@ def correlate_tf_expression(
             )
 
     return pd.DataFrame(
-        l_cluster_tf_corr, columns=["motif_collection_cluster", "transcription_factor", "correlation_coef"]
+        l_cluster_tf_corr, columns=np.array(["motif_collection_cluster", "transcription_factor", "correlation_coef"])
     )

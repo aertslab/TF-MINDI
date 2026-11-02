@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import matplotlib.patches
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -112,6 +114,9 @@ def region_contributions(
     if "contrib" not in adata.uns["unique_examples"]:
         raise ValueError("'contrib' array not found in unique_examples storage")
     annotation_col = resolve_annotation_col(adata, annotation_col)
+
+    if not isinstance(adata.obs, pd.DataFrame):
+        raise ValueError(f"adata.obs needs to be a pd.DataFrame (not {type(adata.obs)})")
 
     # Handle region_name to example_idx conversion
     if region_name is not None:
@@ -263,7 +268,7 @@ def region_contributions(
         ax.set_xlim(x_min, x_max)
         ax.set_axis_off()
 
-    render_kwargs = {
+    render_kwargs: dict[str, Any] = {
         "width": 15,
         "height": 3,
         "xlabel": "Position",
