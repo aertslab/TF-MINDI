@@ -142,4 +142,7 @@ nitpick_ignore = [
     ("py:class", "tfmindi.types.Pattern"),
     ("py:class", "tfmindi.types.Seqlet"),
     ("py:class", "tfmindi.datasets._PCAData"),
+    # Unions involving Literal are typing.Union, which sphinx_autodoc_typehints links as py:data,
+    # but the Python inventory lists it as py:class.
+    ("py:data", "typing.Union"),
 ]
