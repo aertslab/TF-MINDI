@@ -412,16 +412,23 @@ def get_region_profiles(
     profile = (
         seqlet_adata.obs[["example_idx", weight_col, annotation_col]]
         .merge(region_adata.obs, on="example_idx", how="left")
-        .pivot_table(index="example_idx", columns=annotation_col, values=weight_col, aggfunc="sum")
+        .pivot_table(index="example_idx", columns=annotation_col, values=weight_col, aggfunc="sum", observed=True)
     )
+    # A categorical annotation_col gives CategoricalIndex columns, which break the merge below
+    # (pandas raises InvalidIndexError when slicing the frame), so fall back to a plain Index.
+    profile.columns = pd.Index(list(profile.columns), name=annotation_col)
 
     region_adata.uns[annotation_col] = list(profile.columns)
 
-    region_adata.obs = region_adata.obs.merge(
+    # merge drops the index; restore it so obs_names survive (left merge on unique keys keeps row order)
+    obs_names = region_adata.obs.index
+    merged_obs = region_adata.obs.merge(
         region_adata.obs[["example_idx"]].merge(profile, on="example_idx", how="left").fillna(0),
         on="example_idx",
         how="left",
     )
+    merged_obs.index = obs_names
+    region_adata.obs = merged_obs
 
     assert isinstance(region_adata.obs, pd.DataFrame)
 
